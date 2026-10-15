@@ -79,7 +79,7 @@ func TestUnifiedControls(t *testing.T) {
 	tt := newTester(p)
 	for _, w := range []string{
 		"画面", "亮度", "冷暖", "显示器音量", "音量",
-		"编程", "5800K", "阅读", "4900K", "影音", "D65",
+		"编程", "65% · 微暖", "阅读", "50% · 偏暖", "影音", "中性",
 		"刷新率", "160 Hz",
 	} {
 		if !tt.HasText(w) {

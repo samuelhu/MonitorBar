@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"slices"
 	"strconv"
@@ -15,18 +16,18 @@ import (
 	"github.com/binaryify/MonitorBar/internal/mitv"
 )
 
-// scene sets brightness and warmth at once.
+// scene is a convenience starting point for brightness and warmth.
 type scene struct {
 	name, icon         string
 	brightness, warmth float64
-	tag                string // scientific label: e.g. "编程 · 5800K"
+	keepBrightness     bool // true when a scene should only change warmth
 }
 
 // scene names are set at launch from the system language (see nameScenes).
 var scenes = []scene{
-	{"编程", "code", 65, 10, "5800K"},
-	{"阅读", "book", 50, 25, "4900K"},
-	{"影音", "film", 100, 0, "D65"},
+	{"编程", "code", 65, 10, false},
+	{"阅读", "book", 50, 25, false},
+	{"影音", "film", 0, 0, true},
 }
 
 func nameScenes() {
@@ -53,7 +54,7 @@ type store struct {
 	current    display.Mode
 	hasCurrent bool
 
-	captionStr  string
+	captionStr      string
 	cachedRates     []display.Mode
 	cachedShowRates []display.Mode // the tiers the panel lists
 
@@ -63,8 +64,8 @@ type store struct {
 	input     int // the input chosen in the app, 0 before any
 	volume    float64
 	hasVolume bool
-	muted    bool // volume 0 as mute; returnTo is the level to restore
-	returnTo float64
+	muted     bool // volume 0 as mute; returnTo is the level to restore
+	returnTo  float64
 
 	launchAtLogin bool
 	notice        string
@@ -128,17 +129,19 @@ func (s *store) post(fn func()) {
 // apply sets a scene's brightness, on the backlight when DDC/CI reaches it,
 // and its warmth.
 func (s *store) apply(sc scene) {
-	if s.hasBrightness {
-		s.setBrightness(sc.brightness)
-	} else {
-		s.prefs.SoftBrightness = sc.brightness
+	if !sc.keepBrightness {
+		if s.hasBrightness {
+			s.setBrightness(sc.brightness)
+		} else {
+			s.prefs.SoftBrightness = sc.brightness
+		}
 	}
 	s.prefs.Warmth = sc.warmth
 	s.applyGamma()
 }
 
 func (s *store) isActive(sc scene) bool {
-	return math.Abs(s.effectiveBrightness()-sc.brightness) < 1 && math.Abs(s.prefs.Warmth-sc.warmth) < 1
+	return (sc.keepBrightness || math.Abs(s.effectiveBrightness()-sc.brightness) < 1) && math.Abs(s.prefs.Warmth-sc.warmth) < 1
 }
 
 // effectiveBrightness is the backlight's when DDC/CI reaches it, else the
@@ -150,12 +153,20 @@ func (s *store) effectiveBrightness() float64 {
 	return s.prefs.SoftBrightness
 }
 
-func gammaLimited() string { return tr("Windows 限制了软件调光的幅度，已调到它允许的最暗。", "Windows limited the software dimming; it is at the darkest it allows.") }
-func gammaFailed() string  { return tr("调光失败：系统拒绝了这个设置。", "Dimming failed: the system refused the setting.") }
+func gammaLimited() string {
+	return tr("Windows 限制了软件调光的幅度，已调到它允许的最暗。", "Windows limited the software dimming; it is at the darkest it allows.")
+}
+func gammaFailed() string {
+	return tr("调光失败：系统拒绝了这个设置。", "Dimming failed: the system refused the setting.")
+}
 
 func (s *store) applyGamma() {
 	s.dirty = true
-	err := s.setGamma(s.prefs.SoftBrightness/100, s.prefs.Warmth/100)
+	brightness := s.prefs.SoftBrightness / 100
+	if s.hasBrightness {
+		brightness = 1 // DDC/CI owns brightness; gamma only adjusts warmth.
+	}
+	err := s.setGamma(brightness, s.prefs.Warmth/100)
 	switch {
 	case errors.Is(err, display.ErrGammaLimited):
 		s.notice = gammaLimited()
@@ -249,7 +260,9 @@ func (s *store) selectInput(src mitv.Source) {
 	}
 	go func() {
 		if err := link.Select(src.ID); err != nil {
-			s.post(func() { s.notice = tr("切换到 ", "Switching to ")+src.Name+tr(" 失败：显示器没有响应", " failed: the display did not answer") })
+			s.post(func() {
+				s.notice = tr("切换到 ", "Switching to ") + src.Name + tr(" 失败：显示器没有响应", " failed: the display did not answer")
+			})
 		}
 	}()
 }
@@ -354,6 +367,14 @@ func (s *store) probeDDC() {
 			r = readDDC(d, true)
 		}
 		s.post(func() {
+			if s.monitor != m {
+				if d != nil {
+					go d.Close()
+				}
+				s.probingDDC = false
+				s.probeDDC()
+				return
+			}
 			s.probingDDC = false
 			s.ddc = d
 			s.applyDDC(r)
@@ -391,9 +412,14 @@ func readDDC(d *display.DDC, all bool) ddcReading {
 
 func (s *store) applyDDC(r ddcReading) {
 	if s.ddc == nil {
+		wasHardwareBrightness := s.hasBrightness
 		s.hasBrightness, s.ddcVolume, s.ddcInputs, s.controls = false, false, nil, nil
+		if wasHardwareBrightness {
+			s.applyGamma()
+		}
 		return
 	}
+	wasHardwareBrightness := s.hasBrightness
 	if s.maxima == nil {
 		s.maxima = map[byte]int{}
 	}
@@ -406,6 +432,10 @@ func (s *store) applyDDC(r ddcReading) {
 	}
 	if v, ok := percent(display.VCPBrightness); ok {
 		s.brightness, s.hasBrightness = v, true
+	} else if !r.refreshed {
+		// A full probe for a different monitor may have replaced a previous
+		// monitor that supported the brightness code.
+		s.hasBrightness = false
 	}
 	if v, ok := percent(display.VCPVolume); ok {
 		s.ddcVolume = true
@@ -432,6 +462,9 @@ func (s *store) applyDDC(r ddcReading) {
 		if v, ok := r.values[c.code]; ok {
 			s.controls = append(s.controls, control{code: c.code, name: controlName(c.code, c.name), value: float64(v[0]), max: v[1]})
 		}
+	}
+	if wasHardwareBrightness != s.hasBrightness {
+		s.applyGamma()
 	}
 }
 
@@ -481,7 +514,7 @@ func (s *store) applyMode(m display.Mode) {
 	if err := s.monitor.Apply(m); err != nil {
 		s.notice = tr("切换失败，显示器拒绝了该模式", "Switch failed: the display refused the mode")
 	} else {
-		s.notice = tr("已切换到 ", "Switched to ")+m.Title()+" · "+strconv.Itoa(m.RefreshRate)+" Hz"
+		s.notice = tr("已切换到 ", "Switched to ") + m.Title() + " · " + strconv.Itoa(m.RefreshRate) + " Hz"
 	}
 	s.refreshDisplay()
 }
@@ -621,14 +654,17 @@ func (s *store) detectingAny() bool { return s.detecting || s.probingDDC }
 
 func (s *store) toggleLaunchAtLogin() {
 	if err := mygo.App.SetOpenAtLogin(!s.launchAtLogin); err != nil {
-		s.notice = tr("登录项设置失败：", "Login item failed: ")+err.Error()
+		s.notice = tr("登录项设置失败：", "Login item failed: ") + err.Error()
 	}
 	s.launchAtLogin = mygo.App.OpenAtLogin()
 }
 
 func (s *store) save() {
 	if s.dirty {
-		s.prefs.save()
+		if err := s.prefs.save(); err != nil {
+			log.Printf("settings: %v", err)
+			return
+		}
 		s.dirty = false
 	}
 }

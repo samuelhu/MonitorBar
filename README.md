@@ -26,7 +26,7 @@ MonitorBar 只在 REDMI 显示器 G Pro 27U 2026 上测试过，不保证在你�
 
 | 区域 | 功能 |
 | --- | --- |
-| 场景 | **编程 / 阅读 / 影音** 三档预设，一键切换亮度与色温 |
+| 场景 | **编程 / 阅读 / 影音** 三个可调整的舒适起点 |
 | 画面 | 软件亮度（或硬件背光）、冷暖色温 |
 | 音量 | **显示器音量**（局域网或 DDC/CI） |
 | 输入源 | **切换 HDMI / DP / USB-C 等信号源** |
@@ -36,6 +36,8 @@ MonitorBar 只在 REDMI 显示器 G Pro 27U 2026 上测试过，不保证在你�
 - **切换输入源、调音量不需要 DDC/CI**：澎湃 OS 显示器（如 REDMI 显示器 G Pro 27U 2026）在局域网提供遥控接口，MonitorBar 自动发现并使用它。Mac 和 Windows 接在同一台显示器的不同接口上时，两边都能一键切到对方。
 - **支持 DDC/CI 的显示器**：自动用 DDC/CI 调硬件背光，切换输入源、调音量，并显示对比度、锐度、RGB 增益等显示器回应的设置。
 - **软件调光与色温**通过显卡的 Gamma 表实现，任何连接线、任何显示器都能用。
+- 场景是可调整的舒适起点，不是校准档或健康建议。亮度百分比不对应固定的 cd/m²；冷暖控制只调整 Gamma 表中的 RGB 增益，不会测量或保证实际色温。影音场景恢复中性色调并保留当前亮度。中性也不代表显示器已经校准到 [sRGB 的 D65 参考白点](https://www.w3.org/Graphics/Color/srgb)。
+- 冷暖控制适合按个人观感调整，不应宣称能预防眼疲劳；[Cochrane 对蓝光过滤眼镜的综述](https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD013244.pub2/full)没有发现其能减轻电脑使用造成的眼疲劳。该综述研究的是眼镜，不是本应用的 Gamma 调整。
 - 显示器不支持的功能不会出现在界面上。
 - 单个可执行文件，无 webview，空闲时不占 CPU；中文界面，深色主题。
 
@@ -123,6 +125,8 @@ git tag v1.0.0 && git push origin v1.0.0
 ## English
 
 REDMI monitors do not support DDC/CI, so the usual tools (MonitorControl, BetterDisplay, Lunar) cannot switch their inputs. They run HyperOS, though, whose LAN remote API can, DP and USB-C included. MonitorBar manages an external monitor from the macOS menu bar or the Windows notification area. It switches inputs and changes volume over the LAN remote API of Xiaomi HyperOS monitors, or over DDC/CI on monitors that support it (backlight and picture controls too), dims and warms the picture through the gamma table, and switches refresh rates. It is one Go codebase built with [mygo](https://mygo.egoist.dev/), drawing native UI on both platforms; the Windows build cross-compiles from a Mac. See [Development](#开发) for build commands.
+
+The Coding, Reading, and Movie scenes are adjustable comfort starting points, not calibration modes or health recommendations. Brightness percentages do not represent a fixed luminance in cd/m². Warmth applies relative RGB gains through the gamma table; the app does not measure or guarantee a specific color temperature. Movie returns the image to neutral and keeps the current brightness. Neutral does not mean the display is calibrated to [sRGB's D65 reference white](https://www.w3.org/Graphics/Color/srgb). Warmth is a personal preference and should not be described as eye-strain prevention. A [Cochrane review of blue-light-filtering spectacles](https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD013244.pub2/full) found no short-term eye-strain benefit from the lenses it studied; that review did not study this app's gamma adjustment.
 
 ## 许可证
 

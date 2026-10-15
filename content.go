@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -23,15 +22,22 @@ func (p *panel) overview(c *ui.Context) {
 // scenes is the hero row: three presets, applied in one click.
 func (p *panel) scenes(c *ui.Context) {
 	s := p.s
+	groupLabel(c, tr("场景", "Scenes"), tr("舒适起点", "Starting points"))
 	ui.Row(c).Gap(6).Children(func() {
 		for _, sc := range scenes {
 			active := s.isActive(sc)
+			brightness := tr("保持当前亮度", "Current brightness")
+			detail := warmthWord(sc.warmth)
+			if !sc.keepBrightness {
+				brightness = fmt.Sprintf(tr("亮度 %d%%", "Brightness %d%%"), int(sc.brightness))
+				detail = fmt.Sprintf("%d%% · %s", int(sc.brightness), detail)
+			}
 			e := chip(c.Key(sc.name), active).Grow(1).Height(58).Gap(3).
-				Tooltip(fmt.Sprintf(tr("%s · 亮度 %d%% · %s", "%s · Brightness %d%% · %s"), sc.name, int(sc.brightness), warmthLabel(sc.warmth)))
+				Tooltip(fmt.Sprintf("%s · %s · %s", sc.name, brightness, warmthWord(sc.warmth)))
 			e.Children(func() {
 				icon(c, sc.icon).FontSize(15)
 				ui.Text(c, sc.name).FontSize(13).FontWeight(600).LetterSpacing(-0.1)
-				ui.Text(c, sc.tag).FontSize(11).FontWeight(430).TextColor(muted)
+				ui.Text(c, detail).FontSize(11).FontWeight(430).TextColor(muted)
 			})
 			if e.Clicked() {
 				s.apply(sc)
@@ -62,36 +68,22 @@ func (p *panel) warmthRow(c *ui.Context) {
 	s := p.s
 	if (sliderRow{key: "warmth", title: tr("冷暖", "Warmth"), icon: "thermometer",
 		value: &s.prefs.Warmth, lo: -50, hi: 100, step: 5, magneticZero: true,
-		format: warmthValue, unit: "K"}).show(c) {
+		format: warmthWord}).show(c) {
 		s.applyGamma()
 	}
 }
 
-func warmthValue(v float64) string {
-	return fmt.Sprint(warmthToKelvin(v))
-}
-
-func warmthLabel(v float64) string {
-	return fmt.Sprintf("%dK", warmthToKelvin(v))
-}
-
-func warmthToKelvin(w float64) int {
+func warmthWord(w float64) string {
 	switch {
 	case w == 0:
-		return 6500
-	case w == 10:
-		return 5800
-	case w == 25:
-		return 4900
+		return tr("中性", "Neutral")
+	case w > 0 && w < 20:
+		return tr("微暖", "Slightly warm")
+	case w > 0:
+		return tr("偏暖", "Warmer")
+	default:
+		return tr("偏冷", "Cooler")
 	}
-	var m float64
-	if w > 0 {
-		m = 153.846 + w*1.85 + (w*w)*0.0031
-	} else {
-		m = 153.846 + w*0.926
-	}
-	k := 1e6 / m
-	return int(math.Round(k/50.0)) * 50
 }
 
 func (p *panel) volume(c *ui.Context) {

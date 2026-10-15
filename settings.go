@@ -27,19 +27,51 @@ func dataDir() string {
 }
 
 func loadSettings() *settings {
-	s := &settings{SoftBrightness: 65, Warmth: 10,
+	s := &settings{SoftBrightness: 100,
 		path: filepath.Join(dataDir(), "settings.json")}
 	if data, err := os.ReadFile(s.path); err == nil {
 		_ = json.Unmarshal(data, s)
 	}
+	s.normalize()
 	return s
 }
 
-func (s *settings) save() {
+func (s *settings) normalize() {
+	s.SoftBrightness = max(20, min(s.SoftBrightness, 100))
+	s.Warmth = max(-50, min(s.Warmth, 100))
+	if s.LastInput < 0 || s.LastInput > 0xFFFF {
+		s.LastInput = 0
+	}
+}
+
+func (s *settings) save() error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		return
+		return err
 	}
-	_ = os.MkdirAll(filepath.Dir(s.path), 0o700)
-	_ = os.WriteFile(s.path, data, 0o600)
+	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".settings-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if err := f.Chmod(0o600); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), s.path)
 }
