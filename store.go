@@ -196,6 +196,15 @@ func (s *store) inputChannel() string {
 	return "DDC/CI"
 }
 
+// inputNote pairs the host's physical cable with the control channel.
+func (s *store) inputNote() string {
+	channel := s.inputChannel()
+	if s.monitor.Connection != "" {
+		return fmt.Sprintf(tr("本机 %s · %s", "Host %s · %s"), s.monitor.Connection, channel)
+	}
+	return channel
+}
+
 // pictureNote says where brightness is applied: hardware backlight or gamma.
 func (s *store) pictureNote() string {
 	if s.hasBrightness {

@@ -109,12 +109,12 @@ func muteNote(s *store) string {
 func (p *panel) routing(c *ui.Context) {
 	s := p.s
 	if sources := s.sources(); len(sources) > 0 {
-		groupLabel(c, tr("输入源", "Input"), s.inputChannel())
+		groupLabel(c, tr("输入源", "Input"), s.inputNote())
 		card(c, func() {
 			chips := func() {
 				for _, src := range sources {
 					label := formatSourceName(src.Name)
-					if chipText(c.Key(src.ID), label, s.input == src.ID) {
+					if chipSource(c.Key(src.ID), label, s.input == src.ID) {
 						s.selectInput(src)
 					}
 				}
@@ -127,6 +127,23 @@ func (p *panel) routing(c *ui.Context) {
 		})
 	}
 	p.refreshRates(c)
+}
+
+func chipSource(c *ui.Context, label string, selected bool) bool {
+	e := chip(c, selected).Grow(1).Height(32)
+	weight := 500
+	if selected {
+		weight = 600
+	}
+	e.Children(func() {
+		ui.Row(c).Gap(5).Center().Children(func() {
+			if selected {
+				ui.Box(c).Size(5, 5).Radius(2.5).Background(accent)
+			}
+			ui.Text(c, label).FontSize(13).FontWeight(weight).LetterSpacing(-0.1).SingleLine()
+		})
+	})
+	return e.Clicked()
 }
 
 func formatSourceName(name string) string {
