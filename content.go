@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -112,7 +113,8 @@ func (p *panel) routing(c *ui.Context) {
 		card(c, func() {
 			chips := func() {
 				for _, src := range sources {
-					if chipText(c.Key(src.ID), src.Name, s.input == src.ID) {
+					label := formatSourceName(src.Name)
+					if chipText(c.Key(src.ID), label, s.input == src.ID) {
 						s.selectInput(src)
 					}
 				}
@@ -125,6 +127,16 @@ func (p *panel) routing(c *ui.Context) {
 		})
 	}
 	p.refreshRates(c)
+}
+
+func formatSourceName(name string) string {
+	if strings.HasPrefix(name, "HDMI") && len(name) > 4 && name[4] >= '0' && name[4] <= '9' {
+		return "HDMI " + name[4:]
+	}
+	if strings.HasPrefix(name, "DP") && len(name) > 2 && name[2] >= '0' && name[2] <= '9' {
+		return "DP " + name[2:]
+	}
+	return name
 }
 
 func (p *panel) refreshRates(c *ui.Context) {

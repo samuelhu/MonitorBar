@@ -52,7 +52,7 @@ func newTester(p *panel) *ui.Tester {
 func TestOverview(t *testing.T) {
 	p, _ := testPanel(t)
 	tt := newTester(p)
-	for _, want := range []string{"Mi Monitor", "HDMI · 1920 × 1080 @ 160Hz", "HDMI1", "DP", "USB-C", "显示器音量", "已通过局域网连接 · 澎湃 OS 遥控"} {
+	for _, want := range []string{"Mi Monitor", "HDMI · 1920 × 1080 @ 160Hz", "HDMI 1", "DP", "USB-C", "显示器音量", "已通过局域网连接 · 澎湃 OS 遥控"} {
 		if !tt.HasText(want) {
 			t.Errorf("missing %q in %q", want, tt.Texts())
 		}
