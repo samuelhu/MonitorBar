@@ -60,21 +60,8 @@ func (p *panel) warmthRow(c *ui.Context) {
 	s := p.s
 	if (sliderRow{key: "warmth", title: tr("冷暖", "Warmth"), icon: "thermometer",
 		value: &s.prefs.Warmth, lo: -50, hi: 100, step: 5, magneticZero: true,
-		format: warmthWord}).show(c) {
+		unit: "%"}).show(c) {
 		s.applyGamma()
-	}
-}
-
-func warmthWord(w float64) string {
-	switch {
-	case w == 0:
-		return tr("中性", "Neutral")
-	case w > 0 && w < 20:
-		return tr("微暖", "Slightly warm")
-	case w > 0:
-		return tr("偏暖", "Warmer")
-	default:
-		return tr("偏冷", "Cooler")
 	}
 }
 

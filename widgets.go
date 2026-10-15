@@ -91,12 +91,7 @@ func (s sliderRow) show(c *ui.Context) bool {
 			if s.format != nil {
 				text = s.format(*s.value)
 			}
-			value := ui.Text(c, text)
-			if s.format != nil {
-				value.SingleLine().FontSize(12).FontWeight(500).TextColor(muted)
-			} else {
-				value.FontSize(18).FontWeight(600).LetterSpacing(-0.2).FontFeatures("tnum")
-			}
+			ui.Text(c, text).FontSize(18).FontWeight(600).LetterSpacing(-0.2).FontFeatures("tnum")
 			if s.unit != "" {
 				ui.Text(c, s.unit).FontSize(11).FontWeight(500).TextColor(muted)
 			}
