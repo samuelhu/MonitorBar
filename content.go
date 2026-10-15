@@ -26,18 +26,10 @@ func (p *panel) scenes(c *ui.Context) {
 	ui.Row(c).Gap(6).Children(func() {
 		for _, sc := range scenes {
 			active := s.isActive(sc)
-			brightness := tr("保持当前亮度", "Current brightness")
-			detail := compactWarmthWord(sc.warmth)
-			if !sc.keepBrightness {
-				brightness = fmt.Sprintf(tr("亮度 %d%%", "Brightness %d%%"), int(sc.brightness))
-				detail = fmt.Sprintf("%d%% · %s", int(sc.brightness), detail)
-			}
-			e := chip(c.Key(sc.name), active).Grow(1).Height(58).Gap(3).
-				Tooltip(fmt.Sprintf("%s · %s · %s", sc.name, brightness, warmthWord(sc.warmth)))
+			e := chip(c.Key(sc.name), active).Grow(1).Height(50).Gap(3)
 			e.Children(func() {
 				icon(c, sc.icon).FontSize(15)
 				ui.Text(c, sc.name).FontSize(13).FontWeight(600).LetterSpacing(-0.1)
-				ui.Text(c, detail).SingleLine().TextAlign(ui.Center).FontSize(11).FontWeight(430).TextColor(muted)
 			})
 			if e.Clicked() {
 				s.apply(sc)
@@ -84,13 +76,6 @@ func warmthWord(w float64) string {
 	default:
 		return tr("偏冷", "Cooler")
 	}
-}
-
-func compactWarmthWord(w float64) string {
-	if w > 0 && w < 20 {
-		return tr("微暖", "Warm")
-	}
-	return warmthWord(w)
 }
 
 func (p *panel) volume(c *ui.Context) {
