@@ -9,7 +9,6 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/binaryify/MonitorBar/internal/display"
-	"github.com/binaryify/MonitorBar/internal/usage"
 )
 
 // chrome is the panel's height besides the scrolling content: arrow,
@@ -63,14 +62,6 @@ func (a *app) ready(show bool) {
 	mygo.App.OnSecondInstance(func([]string, string) { a.open() })
 	mygo.Screen.OnDisplaysChanged(changed)
 	mygo.Power.OnResume(changed)
-	go func() {
-		for range time.Tick(usage.Interval) {
-			mygo.RunOnMain(func() {
-				a.s.recordUsage()
-				a.s.redraw()
-			})
-		}
-	}()
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		a.s.save()
 		display.RestoreGamma()
@@ -81,7 +72,6 @@ func (a *app) ready(show bool) {
 	})
 
 	a.s.detect()
-	a.s.autoCheck()
 	// Open the panel on the first launch (or with --show) so new users find the icon.
 	if show || !a.s.prefs.LaunchedBefore {
 		a.s.prefs.LaunchedBefore, a.s.dirty = true, true

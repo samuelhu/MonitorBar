@@ -87,32 +87,6 @@ func (m Mode) ID() string {
 }
 func (m Mode) Title() string { return fmt.Sprintf("%d × %d", m.Width, m.Height) }
 
-// Resolutions returns one mode per resolution, HiDPI or not, preferring the
-// given refresh rate, from the largest.
-func Resolutions(modes []Mode, hiDPI bool, refreshRate int) []Mode {
-	best := map[string]Mode{}
-	for _, m := range modes {
-		if m.HiDPI() != hiDPI {
-			continue
-		}
-		cur, ok := best[m.SizeKey()]
-		if !ok || cur.RefreshRate != refreshRate && (m.RefreshRate == refreshRate || m.RefreshRate > cur.RefreshRate) {
-			best[m.SizeKey()] = m
-		}
-	}
-	out := make([]Mode, 0, len(best))
-	for _, m := range best {
-		out = append(out, m)
-	}
-	slices.SortFunc(out, func(a, b Mode) int {
-		if a.Width != b.Width {
-			return b.Width - a.Width
-		}
-		return b.Height - a.Height
-	})
-	return out
-}
-
 // RefreshRates returns the modes of the resolution of current, fastest first.
 func RefreshRates(modes []Mode, current Mode) []Mode {
 	var out []Mode

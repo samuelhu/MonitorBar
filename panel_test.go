@@ -7,13 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
 	"github.com/binaryify/MonitorBar/internal/display"
 	"github.com/binaryify/MonitorBar/internal/mitv"
-	"github.com/binaryify/MonitorBar/internal/usage"
 )
 
 // testPanel is the panel over a store of fixed data, connected to the
@@ -23,17 +21,13 @@ func testPanel(t *testing.T) (*panel, *[2]float64) {
 	var gamma [2]float64
 	s := &store{
 		prefs:    &settings{SoftBrightness: 100},
-		tracker:  usage.Open(filepath.Join(t.TempDir(), "usage.json")),
 		redraw:   func() {},
 		setGamma: func(b, w float64) error { gamma = [2]float64{b, w}; return nil },
 		monitor:  display.Monitor{Name: "Mi Monitor", Connection: "HDMI"},
 		link:     mitv.New("192.0.2.1"),
 		inputs:   []mitv.Source{{ID: 23, Name: "HDMI1"}, {ID: 24, Name: "HDMI2"}, {ID: 29, Name: "DP"}, {ID: 30, Name: "USB-C"}},
 		volume:   80, hasVolume: true, deviceVolume: 80,
-		now: func() time.Time { return time.Date(2026, 10, 15, 12, 0, 0, 0, time.Local) },
 	}
-	s.prefs.DayScene, s.prefs.NightScene = "Default", "Reading"
-	s.dayStart, s.nightStart = parseClock("07:00", 0), parseClock("19:00", 0)
 	for _, rate := range []int{160, 144, 120, 60} {
 		for _, w := range []int{3360, 3200, 2560, 1920, 1600, 1280} {
 			s.modes = append(s.modes, display.Mode{Width: w, Height: w * 9 / 16, PixelWidth: 2 * w, PixelHeight: w * 9 / 8, RefreshRate: rate})
@@ -43,9 +37,6 @@ func testPanel(t *testing.T) (*panel, *[2]float64) {
 		}
 	}
 	s.current, s.hasCurrent = s.modes[3], true // 1920 × 1080 HiDPI at 160 Hz
-	day := func(d string, awake, active int) usage.Day { return usage.Day{Day: d, Awake: awake, Active: active} }
-	s.usage = []usage.Day{day("2026-10-08", 5*3600, 3*3600), day("2026-10-09", 8*3600, 6*3600), day("2026-10-10", 2*3600, 3000),
-		day("2026-10-11", 0, 0), day("2026-10-12", 6*3600, 4*3600), day("2026-10-13", 9*3600, 7*3600), day("2026-10-14", 3*3600, 2*3600)}
 	return &panel{s: s, maxContent: 850, arrowX: panelWidth / 2}, &gamma
 }
 
@@ -60,7 +51,7 @@ func newTester(p *panel) *ui.Tester {
 func TestOverview(t *testing.T) {
 	p, _ := testPanel(t)
 	tt := newTester(p)
-	for _, want := range []string{"Mi Monitor", "HDMI · 1920 × 1080 @ 160Hz", "1920 × 1080", "HDMI1", "DP", "USB-C", "显示器音量", "已通过局域网连接 · 澎湃 OS 遥控"} {
+	for _, want := range []string{"Mi Monitor", "HDMI · 1920 × 1080 @ 160Hz", "HDMI1", "DP", "USB-C", "显示器音量", "已通过局域网连接 · 澎湃 OS 遥控"} {
 		if !tt.HasText(want) {
 			t.Errorf("missing %q in %q", want, tt.Texts())
 		}
@@ -73,7 +64,7 @@ func TestOverview(t *testing.T) {
 func TestSceneSetsGamma(t *testing.T) {
 	p, gamma := testPanel(t)
 	tt := newTester(p)
-	if err := tt.Click("Reading"); err != nil {
+	if err := tt.Click("阅读"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -86,8 +77,8 @@ func TestUnifiedControls(t *testing.T) {
 	p, _ := testPanel(t)
 	tt := newTester(p)
 	for _, w := range []string{
-		"亮度", "冷暖", "标准", "显示器音量", "场景模式",
-		"Default", "编程 5800K", "Reading", "阅读 4900K", "Movie", "影音 D65",
+		"画面", "亮度", "冷暖", "显示器音量", "音量",
+		"编程", "5800K", "阅读", "4900K", "影音", "D65",
 		"刷新率", "160 Hz",
 	} {
 		if !tt.HasText(w) {
@@ -127,43 +118,16 @@ func TestDDCOnly(t *testing.T) {
 	s.ddcInputs = []mitv.Source{{ID: 0x0F, Name: display.InputName(0x0F)}, {ID: 0x11, Name: display.InputName(0x11)}}
 	s.controls = []control{{code: display.VCPContrast, name: "对比度", value: 50, max: 100}}
 	tt := newTester(p)
-	for _, want := range []string{"输入源", "DDC/CI", "DP", "HDMI 1", "硬件背光 · DDC/CI", "70", "对比度", "硬件 · DDC/CI"} {
+	for _, want := range []string{"输入源", "DDC/CI", "DP", "HDMI 1", "亮度", "70", "对比度", "显示器"} {
 		if !tt.HasText(want) {
 			t.Errorf("overview: missing %q in %q", want, tt.Texts())
 		}
 	}
-	if err := tt.Click("Reading"); err != nil {
+	if err := tt.Click("阅读"); err != nil {
 		t.Fatal(err)
 	}
 	if s.brightness != 50 || s.prefs.SoftBrightness != 100 {
 		t.Errorf("reading scene: backlight %v, software %v; want the backlight dimmed", s.brightness, s.prefs.SoftBrightness)
-	}
-}
-
-// Turning the switch on applies the current period's scene; a manual
-// change stays until the next switch, which applies the other scene.
-func TestAutoSwitch(t *testing.T) {
-	p, gamma := testPanel(t)
-	s := p.s
-	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.Local)
-	s.now = func() time.Time { return now }
-	s.prefs.AutoSwitch = true
-	s.autoChanged()
-	if !s.prefs.AutoSwitch || s.prefs.SoftBrightness != 65 || s.prefs.AutoPeriod != "day" {
-		t.Fatalf("after turning on at noon: on %v, brightness %v, period %q", s.prefs.AutoSwitch, s.prefs.SoftBrightness, s.prefs.AutoPeriod)
-	}
-
-	s.setSoftBrightness(75) // a manual change
-	now = now.Add(time.Hour)
-	s.autoCheck()
-	if s.prefs.SoftBrightness != 75 {
-		t.Errorf("a check within the day undid the manual change: %v", s.prefs.SoftBrightness)
-	}
-
-	now = time.Date(2026, 10, 15, 19, 0, 30, 0, time.Local)
-	s.autoCheck()
-	if s.prefs.SoftBrightness != 50 || s.prefs.Warmth != 25 || *gamma != [2]float64{0.5, 0.25} {
-		t.Errorf("at 19:00: brightness %v warmth %v gamma %v, want the reading scene", s.prefs.SoftBrightness, s.prefs.Warmth, *gamma)
 	}
 }
 
@@ -223,7 +187,7 @@ func TestNoticeGrowsPanelWithoutInput(t *testing.T) {
 	}
 	tt := newTester(p)
 	before := p.height
-	if err := tt.Click("Reading"); err != nil { // Click draws only the frames the view asks for
+	if err := tt.Click("阅读"); err != nil { // Click draws only the frames the view asks for
 		t.Fatal(err)
 	}
 	if !tt.HasText(gammaLimited) {

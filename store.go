@@ -4,19 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/egoist/mygo"
 
 	"github.com/binaryify/MonitorBar/internal/display"
 	"github.com/binaryify/MonitorBar/internal/mitv"
-	"github.com/binaryify/MonitorBar/internal/schedule"
-	"github.com/binaryify/MonitorBar/internal/usage"
 )
 
 // scene sets brightness and warmth at once.
@@ -27,9 +23,9 @@ type scene struct {
 }
 
 var scenes = []scene{
-	{"Default", "code", 65, 10, "编程 5800K"},
-	{"Reading", "book", 50, 25, "阅读 4900K"},
-	{"Movie", "film", 100, 0, "影音 D65"},
+	{"编程", "code", 65, 10, "5800K"},
+	{"阅读", "book", 50, 25, "4900K"},
+	{"影音", "film", 100, 0, "D65"},
 }
 
 // store holds what the panel shows and the actions that change it. Its
@@ -37,7 +33,6 @@ var scenes = []scene{
 // goroutines and hands its results back through post.
 type store struct {
 	prefs    *settings
-	tracker  *usage.Tracker
 	redraw   func()                                 // asks the open panel for a new frame
 	setGamma func(brightness, warmth float64) error // the monitor's, replaced in tests
 
@@ -46,10 +41,7 @@ type store struct {
 	current    display.Mode
 	hasCurrent bool
 
-	// Cached display calculations to prevent redundant mode sorting on every UI frame.
 	captionStr  string
-	cachedHiDPI []display.Mode
-	cachedStd   []display.Mode
 	cachedRates []display.Mode
 
 	link      *mitv.Link // the display's LAN remote, nil until found
@@ -59,7 +51,6 @@ type store struct {
 	volume    float64
 	hasVolume bool
 
-	usage         []usage.Day
 	launchAtLogin bool
 	notice        string
 	dirty         bool // prefs changed since the last save
@@ -78,10 +69,6 @@ type store struct {
 	ddcVolume     bool
 	controls      []control
 	maxima        map[byte]int // the range of each VCP code
-
-	// The day and night start times as the time inputs edit them.
-	dayStart, nightStart time.Time
-	now                  func() time.Time // the clock, fixed in tests
 }
 
 // control is a picture setting the monitor offers over DDC/CI.
@@ -104,16 +91,12 @@ var controlCatalog = []struct {
 func newStore() *store {
 	s := &store{
 		prefs:         loadSettings(),
-		tracker:       usage.Open(filepath.Join(dataDir(), "usage.json")),
 		redraw:        func() {},
-		now:           time.Now,
 		launchAtLogin: mygo.App.OpenAtLogin(),
 	}
-	s.dayStart, s.nightStart = parseClock(s.prefs.DayStart, 7*60), parseClock(s.prefs.NightStart, 19*60)
 	s.refreshDisplay()
 	s.setGamma = func(b, w float64) error { return s.monitor.SetGamma(b, w) }
 	s.applyGamma()
-	s.usage = s.tracker.Recent(7)
 	return s
 }
 
@@ -126,16 +109,6 @@ func (s *store) post(fn func()) {
 }
 
 // MARK: Picture (software, through the gamma table)
-
-func (s *store) setSoftBrightness(percent float64) {
-	s.prefs.SoftBrightness = percent
-	s.applyGamma()
-}
-
-func (s *store) setWarmth(percent float64) {
-	s.prefs.Warmth = percent
-	s.applyGamma()
-}
 
 // apply sets a scene's brightness, on the backlight when DDC/CI reaches it,
 // and its warmth.
@@ -201,6 +174,14 @@ func (s *store) inputChannel() string {
 		return "局域网"
 	}
 	return "DDC/CI"
+}
+
+// pictureNote says where brightness is applied: hardware backlight or gamma.
+func (s *store) pictureNote() string {
+	if s.hasBrightness {
+		return "硬件背光"
+	}
+	return "软件调光"
 }
 
 // connect finds the display on the LAN: the host found last time first,
@@ -467,62 +448,6 @@ func (s *store) setControl(i int) {
 	}
 }
 
-// MARK: Day and night
-
-// autoCheck applies the day or night scene when the period changed since
-// the last one applied, so manual changes stay until the next switch.
-func (s *store) autoCheck() {
-	if !s.prefs.AutoSwitch {
-		return
-	}
-	period, _ := s.autoTimes().At(s.now())
-	if string(period) == s.prefs.AutoPeriod {
-		return
-	}
-	name := s.prefs.DayScene
-	if period == schedule.Night {
-		name = s.prefs.NightScene
-	}
-	for _, sc := range scenes {
-		if sc.name == name {
-			s.apply(sc)
-		}
-	}
-	s.prefs.AutoPeriod, s.dirty = string(period), true
-}
-
-// autoChanged takes new settings: the current period's scene applies now.
-func (s *store) autoChanged() {
-	s.prefs.DayStart, s.prefs.NightStart = s.dayStart.Format("15:04"), s.nightStart.Format("15:04")
-	s.prefs.AutoPeriod, s.dirty = "", true
-	s.autoCheck()
-}
-
-func (s *store) autoTimes() schedule.Times {
-	return schedule.Times{
-		DayStart:   s.dayStart.Hour()*60 + s.dayStart.Minute(),
-		NightStart: s.nightStart.Hour()*60 + s.nightStart.Minute(),
-	}
-}
-
-// autoStatus says what is on and what comes next.
-func (s *store) autoStatus() string {
-	period, next := s.autoTimes().At(s.now())
-	if period == schedule.Day {
-		return fmt.Sprintf("现在是白天，%s 切换到「%s」", next.Format("15:04"), s.prefs.NightScene)
-	}
-	return fmt.Sprintf("现在是夜晚，%s 切换到「%s」", next.Format("15:04"), s.prefs.DayScene)
-}
-
-// parseClock reads "15:04" into a time of day, or the fallback minutes.
-func parseClock(text string, fallback int) time.Time {
-	t, err := time.Parse("15:04", text)
-	if err != nil {
-		t = time.Date(0, 1, 1, fallback/60, fallback%60, 0, 0, time.UTC)
-	}
-	return t
-}
-
 // MARK: Display modes
 
 func (s *store) applyMode(m display.Mode) {
@@ -547,13 +472,7 @@ func (s *store) refreshDisplay() {
 
 func (s *store) updateDisplayCache() {
 	s.captionStr = s.computeCaption()
-	rate := 60
-	if s.hasCurrent {
-		rate = s.current.RefreshRate
-	}
 	s.cachedRates = display.RefreshRates(s.modes, s.current)
-	s.cachedHiDPI = display.Resolutions(s.modes, true, rate)
-	s.cachedStd = display.Resolutions(s.modes, false, rate)
 }
 
 func (s *store) computeCaption() string {
@@ -594,7 +513,6 @@ func (s *store) displaysChanged() {
 }
 
 func (s *store) panelOpened() {
-	s.usage = s.tracker.Recent(7)
 	// Retry here too: the launch attempt may have raced the network
 	// permission prompt.
 	if s.link == nil {
@@ -614,13 +532,6 @@ func (s *store) detect() {
 // detectingAny reports a channel still being looked for.
 func (s *store) detectingAny() bool { return s.detecting || s.probingDDC }
 
-func (s *store) recordUsage() {
-	s.autoCheck()
-	s.tracker.Record(!s.monitor.Asleep(), time.Duration(display.IdleSeconds()*float64(time.Second)))
-	s.usage = s.tracker.Recent(7)
-	s.save()
-}
-
 func (s *store) toggleLaunchAtLogin() {
 	if err := mygo.App.SetOpenAtLogin(!s.launchAtLogin); err != nil {
 		s.notice = "登录项设置失败：" + err.Error()
@@ -633,5 +544,4 @@ func (s *store) save() {
 		s.prefs.save()
 		s.dirty = false
 	}
-	s.tracker.Flush()
 }

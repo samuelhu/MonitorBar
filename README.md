@@ -6,9 +6,8 @@
 A menu bar (macOS) and tray (Windows) app to manage your monitor — <a href="#english">English</a></p>
 
 <p align="center">
-<img src="docs/screenshots/overview.png" width="270" alt="概览">
-<img src="docs/screenshots/modes.png" width="270" alt="分辨率">
-<img src="docs/screenshots/activity.png" width="270" alt="屏幕时间">
+<img src="docs/screenshots/panel.png" width="270" alt="面板">
+<img src="docs/screenshots/windows.png" width="270" alt="Windows 11">
 </p>
 
 ## 为什么做这个
@@ -17,23 +16,26 @@ REDMI 显示器不支持 DDC/CI。
 
 Mac 上常见的显示器工具（MonitorControl、BetterDisplay、Lunar 等）都靠 DDC/CI 控制显示器，所以在 REDMI 显示器上切换不了输入源，也调不了音量。
 
-不过 REDMI 显示器内置澎湃 OS，开机时会在局域网提供一个遥控接口。MonitorBar 通过这个接口切换输入源（包括 DP 和 USB-C）、调节音量，不依赖 DDC/CI。软件调光、色温、分辨率、屏幕时间这些通用功能也一起做了进去，并且有 Mac 和 Windows 两个版本：两台电脑接在同一台显示器上时，在任意一台上都能一键切到另一台。
+不过 REDMI 显示器内置澎湃 OS，开机时会在局域网提供一个遥控接口。MonitorBar 通过这个接口切换输入源（包括 DP 和 USB-C）、调节音量，不依赖 DDC/CI。软件调光、色温和刷新率切换也一并做了进去，并且有 Mac 和 Windows 两个版本：两台电脑接在同一台显示器上时，在任意一台上都能一键切到另一台。
 
 MonitorBar 只在 REDMI 显示器 G Pro 27U 2026 上测试过，不保证在你的显示器上能正常工作：不同型号的接口、信号源编号可能不一样。如果不能用，可以借助 AI 编程工具来适配：先运行 `MonitorBar --probe` 看看它识别到了什么，再让 AI 参照下面的[适配其他显示器](#适配其他显示器)一节修改代码。
 
 ## 功能
 
-| 分页 | 功能 |
+一页面板，按使用频率从上到下：
+
+| 区域 | 功能 |
 | --- | --- |
-| 概览 | 当前分辨率与刷新率、**切换输入源**、软件亮度、**显示器音量**、场景（日间 / 阅读 / 观影 / 夜间） |
-| 画面 | 场景、**按时间自动切换白天 / 夜晚场景**、软件调光、色温（减少蓝光）、一键恢复 |
-| 分辨率 | 刷新率切换，HiDPI（仅 macOS）与标准分辨率列表 |
-| 屏幕时间 | 今日亮屏与使用时长，最近 7 天柱状图 |
+| 场景 | **编程 / 阅读 / 影音** 三档预设，一键切换亮度与色温 |
+| 画面 | 软件亮度（或硬件背光）、冷暖色温 |
+| 音量 | **显示器音量**（局域网或 DDC/CI） |
+| 输入源 | **切换 HDMI / DP / USB-C 等信号源** |
+| 刷新率 | 160 / 144 / 120 / 60 Hz 等常用档位 |
+| 显示器 | 对比度、锐度、RGB 增益等 DDC/CI 画质项（显示器回应时才显示） |
 
 - **切换输入源、调音量不需要 DDC/CI**：澎湃 OS 显示器（如 REDMI 显示器 G Pro 27U 2026）在局域网提供遥控接口，MonitorBar 自动发现并使用它。Mac 和 Windows 接在同一台显示器的不同接口上时，两边都能一键切到对方。
 - **支持 DDC/CI 的显示器**：自动用 DDC/CI 调硬件背光，切换输入源、调音量，并显示对比度、锐度、RGB 增益等显示器回应的设置。
 - **软件调光与色温**通过显卡的 Gamma 表实现，任何连接线、任何显示器都能用。
-- **自动切换**：在「画面」里打开后，到了设定的白天、夜晚开始时间就自动切换到对应场景（默认 07:00「日间」、19:00「夜间」，场景可选）。只在时段交替时切换，中途的手动调整会保留到下一次交替。
 - 显示器不支持的功能不会出现在界面上。
 - 单个可执行文件，无 webview，空闲时不占 CPU；中文界面，深色主题。
 
@@ -74,7 +76,6 @@ MonitorBar 有三条控制显示器的通道，启动时在后台探测，哪条
 ## 平台差异
 
 - **软件调光**：Windows 只接受离标准曲线不远的 Gamma（最暗约 50%），更暗时退到允许的最暗并保留色温比例，面板会提示。macOS 无此限制。退出时两端都会恢复原始曲线。
-- **亮屏统计**：macOS 读显示器休眠状态；Windows 以「空闲时长 ≥ 电源计划的关闭显示器时间」推断。
 - **面板位置**：从溢出区打开时面板贴在图标上方；拿不到图标位置时（如再次启动程序打开）贴在屏幕右下角。
 - 数据保存在 `~/Library/Application Support/MonitorBar`（macOS）或 `%APPDATA%\MonitorBar`（Windows）。
 
@@ -101,11 +102,9 @@ git tag v1.0.0 && git push origin v1.0.0
 | --- | --- |
 | `main.go` / `app.go` | 入口、托盘图标、弹出面板的尺寸与位置 |
 | `store.go` | 状态与动作：只在主线程读写，网络请求在 goroutine 中，结果经 `post` 回到主线程 |
-| `panel.go` / `tabs.go` / `widgets.go` / `icons.go` | 界面 |
+| `panel.go` / `content.go` / `widgets.go` / `icons.go` | 界面 |
 | `internal/mitv` | 澎湃 OS 局域网接口与发现 |
-| `internal/display` | 平台层：显示器信息、分辨率、Gamma、DDC/CI、亮屏与空闲时间 |
-| `internal/usage` | 屏幕时间，每 30 秒采样，保留 60 天 |
-| `internal/schedule` | 自动切换：按设定时间判断白天或夜晚 |
+| `internal/display` | 平台层：显示器信息、分辨率、Gamma、DDC/CI |
 
 ## 适配其他显示器
 
@@ -123,7 +122,7 @@ git tag v1.0.0 && git push origin v1.0.0
 
 ## English
 
-REDMI monitors do not support DDC/CI, so the usual tools (MonitorControl, BetterDisplay, Lunar) cannot switch their inputs. They run HyperOS, though, whose LAN remote API can, DP and USB-C included. MonitorBar manages an external monitor from the macOS menu bar or the Windows notification area. It switches inputs and changes volume over the LAN remote API of Xiaomi HyperOS monitors, or over DDC/CI on monitors that support it (backlight and picture controls too), dims and warms the picture through the gamma table, switches resolutions and refresh rates, and tracks screen time. It is one Go codebase built with [mygo](https://mygo.egoist.dev/), drawing native UI on both platforms; the Windows build cross-compiles from a Mac. See [Development](#开发) for build commands.
+REDMI monitors do not support DDC/CI, so the usual tools (MonitorControl, BetterDisplay, Lunar) cannot switch their inputs. They run HyperOS, though, whose LAN remote API can, DP and USB-C included. MonitorBar manages an external monitor from the macOS menu bar or the Windows notification area. It switches inputs and changes volume over the LAN remote API of Xiaomi HyperOS monitors, or over DDC/CI on monitors that support it (backlight and picture controls too), dims and warms the picture through the gamma table, and switches refresh rates. It is one Go codebase built with [mygo](https://mygo.egoist.dev/), drawing native UI on both platforms; the Windows build cross-compiles from a Mac. See [Development](#开发) for build commands.
 
 ## 许可证
 
