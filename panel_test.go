@@ -403,3 +403,35 @@ func TestLastInputRestoredForDDC(t *testing.T) {
 		t.Fatalf("expected invalid LastInput 99 to be ignored, got %d", s.input)
 	}
 }
+
+func TestLANInputNotRestoredAsFakeActive(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	s.prefs.LastInput = 24 // previously clicked HDMI 2
+	s.restoreLastInput(s.inputs)
+	if s.input != 0 {
+		t.Fatalf("LAN mode should not restore unverified LastInput as active, got %d", s.input)
+	}
+}
+
+func TestHostPortDefaultAndManualDesignation(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	// By default on HDMI connection with HDMI1 and HDMI2, defaults to HDMI1 (ID 23)
+	if got := s.hostInput(); got != 23 {
+		t.Fatalf("expected default host input to be 23 (HDMI 1), got %d", got)
+	}
+
+	// Manually designating HDMI 2 (ID 24)
+	s.setHostInput(24)
+	if s.prefs.HostInput != 24 {
+		t.Fatalf("expected prefs.HostInput to be 24, got %d", s.prefs.HostInput)
+	}
+	if got := s.hostInput(); got != 24 {
+		t.Fatalf("expected hostInput() to return 24, got %d", got)
+	}
+	if !strings.Contains(s.inputNote(), "HDMI 2") {
+		t.Fatalf("expected inputNote to contain HDMI 2, got %q", s.inputNote())
+	}
+}
+

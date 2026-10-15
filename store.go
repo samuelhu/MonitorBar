@@ -58,11 +58,12 @@ type store struct {
 	cachedRates     []display.Mode
 	cachedShowRates []display.Mode // the tiers the panel lists
 
-	link      *mitv.Link // the display's LAN remote, nil until found
-	detecting bool
-	inputs    []mitv.Source
-	input     int // the input chosen in the app, 0 before any
-	volume    float64
+	link          *mitv.Link // the display's LAN remote, nil until found
+	detecting     bool
+	inputs        []mitv.Source
+	input         int  // the input chosen in the app, 0 before any
+	inputVerified bool // true only when read directly from hardware (DDC/CI VCP 0x60)
+	volume        float64
 	hasVolume bool
 	muted     bool // volume 0 as mute; returnTo is the level to restore
 	returnTo  float64
@@ -196,9 +197,61 @@ func (s *store) inputChannel() string {
 	return "DDC/CI"
 }
 
+// hostInput returns the source ID corresponding to this host's physical cable.
+func (s *store) hostInput() int {
+	if s.prefs != nil && s.prefs.HostInput != 0 {
+		return s.prefs.HostInput
+	}
+	conn := strings.ToUpper(s.monitor.Connection)
+	if conn == "" {
+		conn = "HDMI" // Apple Silicon HDMI fallback
+	}
+	for _, src := range s.sources() {
+		upper := strings.ToUpper(src.Name)
+		if strings.Contains(conn, "HDMI") && strings.HasPrefix(upper, "HDMI") {
+			return src.ID
+		}
+		if strings.Contains(conn, "DP") && strings.HasPrefix(upper, "DP") {
+			return src.ID
+		}
+	}
+	return 0
+}
+
+// setHostInput manually designates which port is connected to this host.
+func (s *store) setHostInput(id int) {
+	if s.prefs == nil {
+		return
+	}
+	s.prefs.HostInput, s.dirty = id, true
+	s.save()
+	var name string
+	for _, src := range s.sources() {
+		if src.ID == id {
+			name = formatSourceName(src.Name)
+			break
+		}
+	}
+	if name == "" {
+		name = strconv.Itoa(id)
+	}
+	s.notice = fmt.Sprintf(tr("已将 %s 设为本机接口", "Set %s as host connection"), name)
+}
+
 // inputNote pairs the host's physical cable with the control channel.
 func (s *store) inputNote() string {
 	channel := s.inputChannel()
+	hostID := s.hostInput()
+	var hostPortName string
+	for _, src := range s.sources() {
+		if src.ID == hostID {
+			hostPortName = formatSourceName(src.Name)
+			break
+		}
+	}
+	if hostPortName != "" {
+		return fmt.Sprintf(tr("本机 %s · %s", "Host %s · %s"), hostPortName, channel)
+	}
 	if s.monitor.Connection != "" {
 		return fmt.Sprintf(tr("本机 %s · %s", "Host %s · %s"), s.monitor.Connection, channel)
 	}
@@ -268,6 +321,7 @@ func (s *store) selectInput(src mitv.Source) {
 		}
 		return
 	}
+	s.notice = tr("已向显示器发送切换指令：", "Switch command sent: ") + formatSourceName(src.Name)
 	go func() {
 		if err := link.Select(src.ID); err != nil {
 			s.post(func() {
@@ -423,7 +477,7 @@ func readDDC(d *display.DDC, all bool) ddcReading {
 func (s *store) applyDDC(r ddcReading) {
 	if s.ddc == nil {
 		wasHardwareBrightness := s.hasBrightness
-		s.hasBrightness, s.ddcVolume, s.ddcInputs, s.controls = false, false, nil, nil
+		s.hasBrightness, s.ddcVolume, s.ddcInputs, s.controls, s.inputVerified = false, false, nil, nil, false
 		if wasHardwareBrightness {
 			s.applyGamma()
 		}
@@ -455,7 +509,10 @@ func (s *store) applyDDC(r ddcReading) {
 	}
 	if v, ok := r.values[display.VCPInput]; ok && s.link == nil {
 		s.input = v[0] & 0xFF // some monitors put more in the high byte
+		s.inputVerified = true
 		s.prefs.LastInput, s.dirty = s.input, true
+	} else if s.link == nil && !r.refreshed {
+		s.inputVerified = false
 	}
 	if r.refreshed {
 		for i := range s.controls {
@@ -549,6 +606,11 @@ func (s *store) refreshDisplay() {
 }
 
 func (s *store) restoreLastInput(sources []mitv.Source) {
+	// Only restore on DDC/CI where hardware state is verifiable.
+	// In LAN mode, avoid restoring stale last-clicked input as active state.
+	if s.link != nil {
+		return
+	}
 	if s.input == 0 && s.prefs.LastInput != 0 {
 		for _, src := range sources {
 			if src.ID == s.prefs.LastInput {

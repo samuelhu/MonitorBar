@@ -13,6 +13,7 @@ type settings struct {
 	Warmth         float64 `json:"warmth"`         // -50...100
 	NetworkHost    string  `json:"networkHost"`    // the display found last time
 	LastInput      int     `json:"lastInput"`      // the input the user picked
+	HostInput      int     `json:"hostInput"`      // designated host connection port
 	LaunchedBefore bool    `json:"launchedBefore"`
 	path           string
 }
@@ -41,6 +42,9 @@ func (s *settings) normalize() {
 	s.Warmth = max(-50, min(s.Warmth, 100))
 	if s.LastInput < 0 || s.LastInput > 0xFFFF {
 		s.LastInput = 0
+	}
+	if s.HostInput < 0 || s.HostInput > 0xFFFF {
+		s.HostInput = 0
 	}
 }
 

@@ -111,10 +111,18 @@ func (p *panel) routing(c *ui.Context) {
 	if sources := s.sources(); len(sources) > 0 {
 		groupLabel(c, tr("输入源", "Input"), s.inputNote())
 		card(c, func() {
+			hostID := s.hostInput()
 			chips := func() {
 				for _, src := range sources {
 					label := formatSourceName(src.Name)
-					if chipSource(c.Key(src.ID), label, s.input == src.ID) {
+					isHost := (src.ID == hostID)
+					// Only highlight if verified from hardware telemetry (DDC/CI VCP 0x60).
+					// In LAN mode, chips act as quick switch triggers without fake radio lock.
+					selected := s.inputVerified && (s.input == src.ID)
+					clicked, rightClicked := chipSource(c.Key(src.ID), label, isHost, selected)
+					if rightClicked {
+						s.setHostInput(src.ID)
+					} else if clicked {
 						s.selectInput(src)
 					}
 				}
@@ -129,11 +137,15 @@ func (p *panel) routing(c *ui.Context) {
 	p.refreshRates(c)
 }
 
-func chipSource(c *ui.Context, label string, selected bool) bool {
-	e := chip(c, selected).Grow(1).Height(32)
+func chipSource(c *ui.Context, label string, isHost, selected bool) (clicked bool, rightClicked bool) {
+	e := chip(c, selected).Grow(1).Height(32).
+		Tooltip(tr("点击向显示器发送切换指令 · 右键设为本机连接", "Click to switch input · Right-click to set as host"))
+	if isHost && !selected {
+		e.Border(0.8, ui.RGBA(255, 255, 255, 0.16))
+	}
 	weight := 500
-	if selected {
-		weight = 600
+	if selected || isHost {
+		weight = 590
 	}
 	e.Children(func() {
 		ui.Row(c).Gap(5).Center().Children(func() {
@@ -143,7 +155,7 @@ func chipSource(c *ui.Context, label string, selected bool) bool {
 			ui.Text(c, label).FontSize(13).FontWeight(weight).LetterSpacing(-0.1).SingleLine()
 		})
 	})
-	return e.Clicked()
+	return e.Clicked(), e.RightClicked()
 }
 
 func formatSourceName(name string) string {
