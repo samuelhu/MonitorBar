@@ -50,6 +50,8 @@ type store struct {
 	input     int // the input chosen in the app, 0 before any
 	volume    float64
 	hasVolume bool
+	muted    bool // volume 0 as mute; returnTo is the level to restore
+	returnTo float64
 
 	launchAtLogin bool
 	notice        string
@@ -245,6 +247,9 @@ func (s *store) selectInput(src mitv.Source) {
 }
 
 func (s *store) setVolume(percent float64) {
+	if percent > 0 {
+		s.muted = false
+	}
 	s.volume = percent
 	if s.link == nil {
 		s.setDDC(display.VCPVolume, percent)
@@ -252,6 +257,18 @@ func (s *store) setVolume(percent float64) {
 	}
 	s.volumeTarget.Store(int64(math.Round(percent)))
 	s.chaseVolume()
+}
+
+// toggleMute mutes by setting volume to 0, and restores the level it had.
+func (s *store) toggleMute() {
+	if s.muted {
+		s.muted = false
+		s.setVolume(max(s.returnTo, 1))
+		return
+	}
+	s.returnTo = max(s.volume, 1)
+	s.muted = true
+	s.setVolume(0)
 }
 
 // chaseVolume steps toward the latest target: the API only has ±1 keys.

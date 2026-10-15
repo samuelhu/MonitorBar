@@ -96,13 +96,13 @@ func (p *panel) header(c *ui.Context) {
 		ui.Box(c).Size(24, 30).Center().TextColor(muted).Label("更多").Cursor(ui.CursorPointer).Children(func() {
 			icon(c, "ellipsis").FontSize(16)
 		}).Menu(func(m *ui.Menu) {
-			if m.Item("重新检测显示器").Chosen() {
+			if m.Item("重新检测").Chosen() {
 				s.detect()
 			}
-			if m.Item("打开系统显示器设置…").Chosen() {
+			if m.Item("系统显示器设置…").Chosen() {
 				_ = mygo.Shell.OpenExternal(display.SettingsURL)
 			}
-			if m.Item("恢复默认显示设置 (100% · D65)").Chosen() {
+			if m.Item("恢复默认画面").Chosen() {
 				s.resetSoftware()
 			}
 			m.Separator()
@@ -110,7 +110,7 @@ func (p *panel) header(c *ui.Context) {
 				s.toggleLaunchAtLogin()
 			}
 			m.Separator()
-			if m.Item("退出 MonitorBar").Chosen() {
+			if m.Item("退出").Chosen() {
 				mygo.App.Quit()
 			}
 		})

@@ -94,13 +94,31 @@ func warmthToKelvin(w float64) int {
 
 func (p *panel) volume(c *ui.Context) {
 	s := p.s
-	groupLabel(c, "音量", "")
+	groupLabel(c, "音量", muteNote(s))
 	card(c, func() {
-		if (sliderRow{key: "volume", title: "显示器音量", icon: "volume",
-			value: &s.volume, lo: 0, hi: 100, step: 5, unit: "%"}).show(c) {
+		if s.muted {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				mute := chip(c, true).Size(28, 24).Label("恢复音量").Tooltip("恢复音量")
+				mute.Children(func() { icon(c, "volume-x").FontSize(13) })
+				if mute.Clicked() {
+					s.toggleMute()
+				}
+				ui.Text(c, "已静音").FontSize(12).FontWeight(600).LetterSpacing(-0.1).Grow(1)
+				ui.Text(c, fmt.Sprintf("原音量 %d%%", int(s.returnTo))).FontSize(11).TextColor(muted)
+			})
+		} else if (sliderRow{key: "volume", title: "显示器音量", icon: "volume",
+			value: &s.volume, lo: 0, hi: 100, step: 5, unit: "%",
+			muteToggle: true, onMute: s.toggleMute}).show(c) {
 			s.setVolume(s.volume)
 		}
 	})
+}
+
+func muteNote(s *store) string {
+	if s.muted {
+		return "已静音"
+	}
+	return ""
 }
 
 // routing is where the signal comes from and how fast it draws.

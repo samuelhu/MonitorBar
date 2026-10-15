@@ -197,3 +197,29 @@ func TestNoticeGrowsPanelWithoutInput(t *testing.T) {
 		t.Fatalf("height stayed %d after the notice appeared", p.height)
 	}
 }
+
+// Mute is volume 0: the button drops the level to zero and restores it after.
+func TestMuteIsVolumeZero(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	s.volume = 40
+	tt := newTester(p)
+	if err := tt.Click("静音"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !s.muted || s.volume != 0 {
+		t.Fatalf("after mute: muted %v volume %v", s.muted, s.volume)
+	}
+	if !tt.HasText("已静音") {
+		t.Errorf("no muted row in %q", tt.Texts())
+	}
+	// The muted row has a button that restores the previous level.
+	if err := tt.Click("恢复音量"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if s.muted || s.volume != 40 {
+		t.Fatalf("after unmute: muted %v volume %v, want 40", s.muted, s.volume)
+	}
+}

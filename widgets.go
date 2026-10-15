@@ -74,6 +74,8 @@ type sliderRow struct {
 	magneticZero     bool
 	format           func(float64) string // the value as shown, default an integer
 	unit             string               // small suffix next to the number
+	muteToggle       bool                 // show a mute button before the − step
+	onMute           func()               // called when the mute button is pressed
 }
 
 // show draws it and reports whether the user changed the value.
@@ -93,6 +95,13 @@ func (s sliderRow) show(c *ui.Context) bool {
 			}
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			if s.muteToggle {
+				mute := chip(c, false).Size(28, 24).Label("静音").Tooltip("静音")
+				mute.Children(func() { icon(c, "volume-x").FontSize(12) })
+				if mute.Clicked() && s.onMute != nil {
+					s.onMute()
+				}
+			}
 			if stepButton(c, "minus") {
 				v := math.Round(*s.value - s.step)
 				if s.magneticZero && math.Abs(v) < s.step/2 {
