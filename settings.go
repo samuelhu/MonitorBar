@@ -9,8 +9,8 @@ import (
 
 // settings are the choices kept between launches, in a JSON file.
 type settings struct {
-	SoftBrightness float64 `json:"softBrightness"` // gamma %, 20...100
-	Warmth         float64 `json:"warmth"`         // -50...100
+	SoftBrightness float64 `json:"softBrightness"` // gamma %, 0...100
+	Warmth         float64 `json:"warmth"`         // 0...100
 	NetworkHost    string  `json:"networkHost"`    // the display found last time
 	LastInput      int     `json:"lastInput"`      // the input the user picked
 	HostInput      int     `json:"hostInput"`      // designated host connection port
@@ -38,8 +38,8 @@ func loadSettings() *settings {
 }
 
 func (s *settings) normalize() {
-	s.SoftBrightness = max(20, min(s.SoftBrightness, 100))
-	s.Warmth = max(-50, min(s.Warmth, 100))
+	s.SoftBrightness = max(0, min(s.SoftBrightness, 100))
+	s.Warmth = max(0, min(s.Warmth, 100))
 	if s.LastInput < 0 || s.LastInput > 0xFFFF {
 		s.LastInput = 0
 	}

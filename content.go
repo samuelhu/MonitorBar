@@ -54,7 +54,7 @@ func (p *panel) picture(c *ui.Context) {
 				s.setBrightness(s.brightness)
 			}
 		} else if (sliderRow{key: "brightness", title: tr("亮度", "Brightness"), icon: "sun",
-			value: &s.prefs.SoftBrightness, lo: 20, hi: 100, step: 5, unit: "%"}).show(c) {
+			value: &s.prefs.SoftBrightness, lo: 0, hi: 100, step: 5, unit: "%"}).show(c) {
 			s.applyGamma()
 		}
 		p.warmthRow(c)
@@ -64,7 +64,7 @@ func (p *panel) picture(c *ui.Context) {
 func (p *panel) warmthRow(c *ui.Context) {
 	s := p.s
 	if (sliderRow{key: "warmth", title: tr("冷暖", "Warmth"), icon: "thermometer",
-		value: &s.prefs.Warmth, lo: -50, hi: 100, step: 5, magneticZero: true,
+		value: &s.prefs.Warmth, lo: 0, hi: 100, step: 5, magneticZero: true,
 		unit: "%"}).show(c) {
 		s.applyGamma()
 	}

@@ -162,6 +162,20 @@ func TestSnapshots(t *testing.T) {
 			f.Close()
 		}
 	}
+
+	// Capture user's exact state: Brightness 50%, Warmth 25%, Volume 19%
+	p.s.hasBrightness = false
+	p.s.prefs.SoftBrightness = 50
+	p.s.prefs.Warmth = 25
+	p.s.volume = 19
+	p.s.deviceVolume = 19
+	tt.Frame()
+	img = tt.Image()
+	crop = img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
+	if f, err := os.Create(filepath.Join(dir, "panel_user_state.png")); err == nil {
+		_ = png.Encode(f, crop)
+		f.Close()
+	}
 }
 
 // The panel must report its natural height even while its window is

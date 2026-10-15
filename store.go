@@ -167,6 +167,9 @@ func (s *store) applyGamma() {
 	brightness := s.prefs.SoftBrightness / 100
 	if s.hasBrightness {
 		brightness = 1 // DDC/CI owns brightness; gamma only adjusts warmth.
+	} else {
+		// Keep a safe floor so the display never blacks out completely at 0%
+		brightness = max(0.12, brightness)
 	}
 	err := s.setGamma(brightness, s.prefs.Warmth/100)
 	switch {
