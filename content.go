@@ -27,7 +27,7 @@ func (p *panel) scenes(c *ui.Context) {
 		for _, sc := range scenes {
 			active := s.isActive(sc)
 			brightness := tr("保持当前亮度", "Current brightness")
-			detail := warmthWord(sc.warmth)
+			detail := compactWarmthWord(sc.warmth)
 			if !sc.keepBrightness {
 				brightness = fmt.Sprintf(tr("亮度 %d%%", "Brightness %d%%"), int(sc.brightness))
 				detail = fmt.Sprintf("%d%% · %s", int(sc.brightness), detail)
@@ -37,7 +37,7 @@ func (p *panel) scenes(c *ui.Context) {
 			e.Children(func() {
 				icon(c, sc.icon).FontSize(15)
 				ui.Text(c, sc.name).FontSize(13).FontWeight(600).LetterSpacing(-0.1)
-				ui.Text(c, detail).FontSize(11).FontWeight(430).TextColor(muted)
+				ui.Text(c, detail).SingleLine().TextAlign(ui.Center).FontSize(11).FontWeight(430).TextColor(muted)
 			})
 			if e.Clicked() {
 				s.apply(sc)
@@ -84,6 +84,13 @@ func warmthWord(w float64) string {
 	default:
 		return tr("偏冷", "Cooler")
 	}
+}
+
+func compactWarmthWord(w float64) string {
+	if w > 0 && w < 20 {
+		return tr("微暖", "Warm")
+	}
+	return warmthWord(w)
 }
 
 func (p *panel) volume(c *ui.Context) {
