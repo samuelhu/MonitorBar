@@ -62,9 +62,13 @@ func (p *panel) warmthRow(c *ui.Context) {
 	s := p.s
 	if (sliderRow{key: "warmth", title: tr("冷暖", "Warmth"), icon: "thermometer",
 		value: &s.prefs.Warmth, lo: -50, hi: 100, step: 5, magneticZero: true,
-		format: warmthLabel}).show(c) {
+		format: warmthValue, unit: "K"}).show(c) {
 		s.applyGamma()
 	}
+}
+
+func warmthValue(v float64) string {
+	return fmt.Sprint(warmthToKelvin(v))
 }
 
 func warmthLabel(v float64) string {

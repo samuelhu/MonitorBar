@@ -303,3 +303,69 @@ func TestInputHighlightRemembersLastPick(t *testing.T) {
 		t.Fatalf("after clicking DP: input %d LastInput %d, want 29", s.input, s.prefs.LastInput)
 	}
 }
+
+func TestRefreshRatesPreserveMaxAndDedupe(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+
+	// 1. A 75Hz office monitor (75, 60): when active is 60, 75Hz must not disappear
+	s.modes = []display.Mode{
+		{Width: 1920, Height: 1080, PixelWidth: 1920, PixelHeight: 1080, RefreshRate: 75},
+		{Width: 1920, Height: 1080, PixelWidth: 1920, PixelHeight: 1080, RefreshRate: 60},
+		// Duplicate 60Hz mode (e.g. RGB vs YCbCr)
+		{Width: 1920, Height: 1080, PixelWidth: 1920, PixelHeight: 1080, RefreshRate: 60},
+	}
+	s.current, s.hasCurrent = s.modes[1], true // current is 60Hz
+	s.updateDisplayCache()
+
+	if len(s.cachedShowRates) != 2 {
+		t.Fatalf("expected 2 unique rates for [75, 60], got %d: %+v", len(s.cachedShowRates), s.cachedShowRates)
+	}
+	if s.cachedShowRates[0].RefreshRate != 75 || s.cachedShowRates[1].RefreshRate != 60 {
+		t.Fatalf("expected [75, 60], got [%d, %d]", s.cachedShowRates[0].RefreshRate, s.cachedShowRates[1].RefreshRate)
+	}
+
+	// 2. A 165Hz gaming monitor: when active is 60, 165Hz max rate must be preserved
+	s.modes = []display.Mode{
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 165},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 144},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 120},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 100},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 60},
+	}
+	s.current, s.hasCurrent = s.modes[4], true // active is 60Hz
+	s.updateDisplayCache()
+
+	has165, has60 := false, false
+	for _, m := range s.cachedShowRates {
+		if m.RefreshRate == 165 {
+			has165 = true
+		}
+		if m.RefreshRate == 60 {
+			has60 = true
+		}
+	}
+	if !has165 || !has60 {
+		t.Fatalf("expected max rate 165Hz and active rate 60Hz in cachedShowRates, got %+v", s.cachedShowRates)
+	}
+}
+
+func TestLastInputRestoredForDDC(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	s.link = nil // DDC only
+	s.prefs.LastInput = 17
+
+	s.restoreLastInput([]mitv.Source{{ID: 15, Name: "VGA"}, {ID: 17, Name: "HDMI1"}, {ID: 18, Name: "HDMI2"}})
+	if s.input != 17 {
+		t.Fatalf("expected s.input to be restored to 17, got %d", s.input)
+	}
+
+	// Stale / invalid input ID should not be set
+	s.input = 0
+	s.prefs.LastInput = 99 // not in sources
+	s.restoreLastInput([]mitv.Source{{ID: 15, Name: "VGA"}, {ID: 17, Name: "HDMI1"}})
+	if s.input != 0 {
+		t.Fatalf("expected invalid LastInput 99 to be ignored, got %d", s.input)
+	}
+}

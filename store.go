@@ -229,10 +229,7 @@ func (s *store) connect() {
 			s.save()
 			slices.SortFunc(sources, func(a, b mitv.Source) int { return a.ID - b.ID })
 			s.inputs = sources
-			// HyperOS has no "current input" API: show the one the user last picked.
-			if s.input == 0 {
-				s.input = s.prefs.LastInput
-			}
+			s.restoreLastInput(s.inputs)
 			if volumeErr == nil {
 				s.deviceVolume, s.volume, s.hasVolume = volume, float64(volume), true
 			}
@@ -429,6 +426,7 @@ func (s *store) applyDDC(r ddcReading) {
 		return
 	}
 	s.ddcInputs = r.inputs
+	s.restoreLastInput(s.ddcInputs)
 	s.controls = nil
 	for _, c := range controlCatalog {
 		if v, ok := r.values[c.code]; ok {
@@ -499,6 +497,17 @@ func (s *store) refreshDisplay() {
 	s.updateDisplayCache()
 }
 
+func (s *store) restoreLastInput(sources []mitv.Source) {
+	if s.input == 0 && s.prefs.LastInput != 0 {
+		for _, src := range sources {
+			if src.ID == s.prefs.LastInput {
+				s.input = s.prefs.LastInput
+				break
+			}
+		}
+	}
+}
+
 func (s *store) updateDisplayCache() {
 	s.captionStr = s.computeCaption()
 	s.cachedRates = display.RefreshRates(s.modes, s.current)
@@ -506,20 +515,49 @@ func (s *store) updateDisplayCache() {
 	if s.hasCurrent {
 		rate = s.current.RefreshRate
 	}
-	// Desktop tiers only (160, 144, 120, 60, or whatever is active).
-	var show []display.Mode
+
+	// Deduplicate modes by refresh rate (one chip per frequency).
+	var unique []display.Mode
+	seen := map[int]bool{}
 	for _, m := range s.cachedRates {
-		switch m.RefreshRate {
-		case 160, 144, 120, 60:
+		if !seen[m.RefreshRate] {
+			seen[m.RefreshRate] = true
+			unique = append(unique, m)
+		}
+	}
+
+	// If 4 or fewer unique rates exist, show all of them without dropping any.
+	if len(unique) <= 4 {
+		s.cachedShowRates = unique
+		return
+	}
+
+	// For monitors with > 4 rates, keep:
+	// 1. The monitor's highest supported rate (unique[0], so maximum capability is never lost)
+	// 2. The currently active rate (rate)
+	// 3. Standard common desktop tiers (240, 180, 165, 160, 144, 120, 60)
+	// Capped at 4 chips for a neat single-row layout.
+	maxRate := unique[0].RefreshRate
+	picked := map[int]bool{maxRate: true, rate: true}
+
+	standardTiers := []int{240, 180, 165, 160, 144, 120, 60}
+	for _, tier := range standardTiers {
+		if len(picked) >= 4 {
+			break
+		}
+		if seen[tier] {
+			picked[tier] = true
+		}
+	}
+
+	var show []display.Mode
+	for _, m := range unique {
+		if picked[m.RefreshRate] {
 			show = append(show, m)
-		default:
-			if m.RefreshRate == rate {
-				show = append(show, m)
-			}
 		}
 	}
 	if len(show) == 0 {
-		show = s.cachedRates
+		show = unique
 	}
 	s.cachedShowRates = show
 }
