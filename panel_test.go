@@ -37,6 +37,7 @@ func testPanel(t *testing.T) (*panel, *[2]float64) {
 		}
 	}
 	s.current, s.hasCurrent = s.modes[3], true // 1920 × 1080 HiDPI at 160 Hz
+	s.updateDisplayCache()
 	return &panel{s: s, maxContent: 850, arrowX: panelWidth / 2}, &gamma
 }
 
@@ -283,4 +284,22 @@ func TestSnapshotsEN(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
+}
+
+// The input chip shows the one the user last picked: HyperOS has no
+// "current source" API, so the app remembers it.
+func TestInputHighlightRemembersLastPick(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	if s.prefs.LastInput != 0 {
+		t.Fatalf("fresh store already has LastInput %d", s.prefs.LastInput)
+	}
+	tt := newTester(p)
+	if err := tt.Click("DP"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if s.input != 29 || s.prefs.LastInput != 29 {
+		t.Fatalf("after clicking DP: input %d LastInput %d, want 29", s.input, s.prefs.LastInput)
+	}
 }

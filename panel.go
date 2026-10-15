@@ -36,7 +36,7 @@ func (p *panel) view(c *ui.Context) {
 	} else {
 		c.Root().Background(ui.Transparent) // the arrow and the rounded corners show the desktop
 	}
-	shell := ui.Column(c).Width(panelWidth).TextColor(ink).FontSize(12)
+	shell := ui.Column(c).Width(panelWidth).TextColor(ink)
 	shell.Children(func() {
 		if runtime.GOOS == "darwin" {
 			p.arrow(c)
@@ -90,8 +90,8 @@ func (p *panel) header(c *ui.Context) {
 			icon(c, "display").FontSize(15).TextColor(ui.RGB(255, 255, 255))
 		})
 		ui.Column(c).Gap(2).Grow(1).Children(func() {
-			ui.Text(c, s.monitor.Name).FontSize(15).FontWeight(600).LetterSpacing(-0.3).SingleLine()
-			ui.Text(c, p.caption()).FontSize(11).FontWeight(400).TextColor(muted).SingleLine()
+			ui.Text(c, s.monitor.Name).FontSize(16).FontWeight(600).LetterSpacing(-0.2).SingleLine()
+			ui.Text(c, p.caption()).FontSize(12).FontWeight(400).TextColor(muted).SingleLine()
 		})
 		ui.Box(c).Size(24, 30).Center().TextColor(muted).Label(tr("更多", "More")).Cursor(ui.CursorPointer).Children(func() {
 			icon(c, "ellipsis").FontSize(16)
@@ -175,7 +175,7 @@ func (p *panel) footer(c *ui.Context) {
 	}
 	ui.Row(c).Gap(6).Padding(10, 0, 4, 0).AlignItems(ui.Center).Children(func() {
 		ui.Box(c).Size(6, 6).Radius(3).Background(dot)
-		ui.Text(c, text).FontSize(11).FontWeight(400).TextColor(muted).Grow(1)
+		ui.Text(c, text).FontSize(11).FontWeight(430).TextColor(muted).Grow(1)
 		if s.detectingAny() {
 			ui.Spinner(c).Size(12, 12)
 		}

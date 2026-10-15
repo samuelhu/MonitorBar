@@ -5,8 +5,6 @@ import (
 	"math"
 
 	"github.com/egoist/mygo/ui"
-
-	"github.com/binaryify/MonitorBar/internal/display"
 )
 
 // content is the panel body: scene presets, picture, output and routing.
@@ -32,8 +30,8 @@ func (p *panel) scenes(c *ui.Context) {
 				Tooltip(fmt.Sprintf(tr("%s · 亮度 %d%% · %s", "%s · Brightness %d%% · %s"), sc.name, int(sc.brightness), warmthLabel(sc.warmth)))
 			e.Children(func() {
 				icon(c, sc.icon).FontSize(15)
-				ui.Text(c, sc.name).FontSize(12).FontWeight(600).LetterSpacing(-0.1)
-				ui.Text(c, sc.tag).FontSize(10).FontWeight(400).TextColor(muted)
+				ui.Text(c, sc.name).FontSize(13).FontWeight(600).LetterSpacing(-0.1)
+				ui.Text(c, sc.tag).FontSize(11).FontWeight(430).TextColor(muted)
 			})
 			if e.Clicked() {
 				s.apply(sc)
@@ -127,22 +125,17 @@ func (p *panel) routing(c *ui.Context) {
 	if sources := s.sources(); len(sources) > 0 {
 		groupLabel(c, tr("输入源", "Input"), s.inputChannel())
 		card(c, func() {
+			chips := func() {
+				for _, src := range sources {
+					if chipText(c.Key(src.ID), src.Name, s.input == src.ID) {
+						s.selectInput(src)
+					}
+				}
+			}
 			if len(sources) <= 4 {
-				ui.Row(c).Gap(6).Children(func() {
-					for _, src := range sources {
-						if chipText(c.Key(src.ID), src.Name, s.input == src.ID) {
-							s.selectInput(src)
-						}
-					}
-				})
+				ui.Row(c).Gap(6).Children(chips)
 			} else {
-				ui.Grid(c).Columns(4).Gap(6).Children(func() {
-					for _, src := range sources {
-						if chipText(c.Key(src.ID), src.Name, s.input == src.ID) {
-							s.selectInput(src)
-						}
-					}
-				})
+				ui.Grid(c).Columns(4).Gap(6).Children(chips)
 			}
 		})
 	}
@@ -155,40 +148,21 @@ func (p *panel) refreshRates(c *ui.Context) {
 	if s.hasCurrent {
 		rate = s.current.RefreshRate
 	}
-	rates := s.cachedRates
-	if len(rates) == 0 && len(s.modes) > 0 {
-		rates = display.RefreshRates(s.modes, s.current)
-	}
-	// Keep standard desktop tiers (160, 144, 120, 60 or active) to form a neat single row
-	var displayRates []display.Mode
-	for _, m := range rates {
-		if m.RefreshRate == 160 || m.RefreshRate == 144 || m.RefreshRate == 120 || m.RefreshRate == 60 || m.RefreshRate == rate {
-			displayRates = append(displayRates, m)
-		}
-	}
-	if len(displayRates) == 0 {
-		displayRates = rates
-	}
+	displayRates := s.cachedShowRates
 	if len(displayRates) > 1 {
 		groupLabel(c, tr("刷新率", "Refresh rate"), fmt.Sprintf("%d Hz", rate))
 		card(c, func() {
-			cols := min(len(displayRates), 4)
+			chips := func() {
+				for _, m := range displayRates {
+					if chipText(c.Key(m.ID()), fmt.Sprintf("%d Hz", m.RefreshRate), m.RefreshRate == rate) {
+						s.applyMode(m)
+					}
+				}
+			}
 			if len(displayRates) <= 4 {
-				ui.Row(c).Gap(6).Children(func() {
-					for _, m := range displayRates {
-						if chipText(c.Key(m.ID()), fmt.Sprintf("%d Hz", m.RefreshRate), m.RefreshRate == rate) {
-							s.applyMode(m)
-						}
-					}
-				})
+				ui.Row(c).Gap(6).Children(chips)
 			} else {
-				ui.Grid(c).Columns(cols).Gap(6).Children(func() {
-					for _, m := range displayRates {
-						if chipText(c.Key(m.ID()), fmt.Sprintf("%d Hz", m.RefreshRate), m.RefreshRate == rate) {
-							s.applyMode(m)
-						}
-					}
-				})
+				ui.Grid(c).Columns(min(len(displayRates), 4)).Gap(6).Children(chips)
 			}
 		})
 	}

@@ -12,6 +12,7 @@ type settings struct {
 	SoftBrightness float64 `json:"softBrightness"` // gamma %, 20...100
 	Warmth         float64 `json:"warmth"`         // -50...100
 	NetworkHost    string  `json:"networkHost"`    // the display found last time
+	LastInput      int     `json:"lastInput"`      // the input the user picked
 	LaunchedBefore bool    `json:"launchedBefore"`
 	path           string
 }

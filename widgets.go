@@ -21,6 +21,8 @@ var (
 	darkTheme   = func() *ui.Theme {
 		t := *ui.DarkTheme()
 		t.Accent, t.AccentHover, t.AccentPressed = accent, accent, accentDeep
+		t.Font = "system-ui" // SF Pro on macOS
+		t.FontSize = 12
 		return &t
 	}()
 )
@@ -35,7 +37,7 @@ func card(c *ui.Context, children func()) ui.Element {
 // groupLabel is the quiet caption above a card: one short word, optional note.
 func groupLabel(c *ui.Context, title, trailing string) {
 	ui.Row(c).Gap(6).Padding(0, 2, 0, 2).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, title).FontSize(11).FontWeight(600).LetterSpacing(0.4).TextColor(muted).Grow(1)
+		ui.Text(c, title).FontSize(11).FontWeight(590).LetterSpacing(0.2).TextColor(muted).Grow(1)
 		if trailing != "" {
 			ui.Text(c, trailing).FontSize(11).FontWeight(400).TextColor(muted)
 		}
@@ -62,7 +64,7 @@ func chip(c *ui.Context, selected bool) ui.Element {
 // buttons.
 func chipText(c *ui.Context, label string, selected bool) bool {
 	e := chip(c, selected).Grow(1).Height(32)
-	e.Children(func() { ui.Text(c, label).FontSize(12).FontWeight(500).LetterSpacing(-0.2).SingleLine() })
+	e.Children(func() { ui.Text(c, label).FontSize(13).FontWeight(500).LetterSpacing(-0.1).SingleLine() })
 	return e.Clicked()
 }
 
@@ -84,12 +86,12 @@ func (s sliderRow) show(c *ui.Context) bool {
 	ui.Column(c).Gap(8).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			icon(c, s.icon).FontSize(14).TextColor(muted).Width(18)
-			ui.Text(c, s.title).FontSize(12).FontWeight(600).LetterSpacing(-0.1).Grow(1)
+			ui.Text(c, s.title).FontSize(13).FontWeight(590).LetterSpacing(-0.1).Grow(1)
 			text := fmt.Sprint(int(math.Round(*s.value)))
 			if s.format != nil {
 				text = s.format(*s.value)
 			}
-			ui.Text(c, text).FontSize(17).FontWeight(600).LetterSpacing(-0.3).FontFeatures("tnum")
+			ui.Text(c, text).FontSize(18).FontWeight(600).LetterSpacing(-0.2).FontFeatures("tnum")
 			if s.unit != "" {
 				ui.Text(c, s.unit).FontSize(11).FontWeight(500).TextColor(muted)
 			}

@@ -54,7 +54,8 @@ type store struct {
 	hasCurrent bool
 
 	captionStr  string
-	cachedRates []display.Mode
+	cachedRates     []display.Mode
+	cachedShowRates []display.Mode // the tiers the panel lists
 
 	link      *mitv.Link // the display's LAN remote, nil until found
 	detecting bool
@@ -228,6 +229,10 @@ func (s *store) connect() {
 			s.save()
 			slices.SortFunc(sources, func(a, b mitv.Source) int { return a.ID - b.ID })
 			s.inputs = sources
+			// HyperOS has no "current input" API: show the one the user last picked.
+			if s.input == 0 {
+				s.input = s.prefs.LastInput
+			}
 			if volumeErr == nil {
 				s.deviceVolume, s.volume, s.hasVolume = volume, float64(volume), true
 			}
@@ -237,6 +242,7 @@ func (s *store) connect() {
 
 func (s *store) selectInput(src mitv.Source) {
 	s.input = src.ID
+	s.prefs.LastInput, s.dirty = src.ID, true
 	link := s.link
 	if link == nil {
 		if s.ddc != nil {
@@ -412,6 +418,7 @@ func (s *store) applyDDC(r ddcReading) {
 	}
 	if v, ok := r.values[display.VCPInput]; ok && s.link == nil {
 		s.input = v[0] & 0xFF // some monitors put more in the high byte
+		s.prefs.LastInput, s.dirty = s.input, true
 	}
 	if r.refreshed {
 		for i := range s.controls {
@@ -495,6 +502,26 @@ func (s *store) refreshDisplay() {
 func (s *store) updateDisplayCache() {
 	s.captionStr = s.computeCaption()
 	s.cachedRates = display.RefreshRates(s.modes, s.current)
+	rate := 60
+	if s.hasCurrent {
+		rate = s.current.RefreshRate
+	}
+	// Desktop tiers only (160, 144, 120, 60, or whatever is active).
+	var show []display.Mode
+	for _, m := range s.cachedRates {
+		switch m.RefreshRate {
+		case 160, 144, 120, 60:
+			show = append(show, m)
+		default:
+			if m.RefreshRate == rate {
+				show = append(show, m)
+			}
+		}
+	}
+	if len(show) == 0 {
+		show = s.cachedRates
+	}
+	s.cachedShowRates = show
 }
 
 func (s *store) computeCaption() string {
