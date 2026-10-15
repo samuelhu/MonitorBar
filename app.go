@@ -24,6 +24,8 @@ type app struct {
 }
 
 func (a *app) ready(show bool) {
+	useSystemLanguage(mygo.App.Locale())
+	nameScenes()
 	a.s = newStore()
 	a.s.redraw = func() {
 		if a.flyout != nil {
@@ -38,9 +40,9 @@ func (a *app) ready(show bool) {
 		log.Fatal("tray: ", err)
 	}
 	menu := mygo.NewMenu([]*mygo.MenuItem{
-		{Label: "打开 MonitorBar", Click: func(*mygo.MenuItem, *mygo.Window) { a.open() }},
+		{Label: tr("打开 MonitorBar", "Open MonitorBar"), Click: func(*mygo.MenuItem, *mygo.Window) { a.open() }},
 		mygo.Separator(),
-		{Label: "退出 MonitorBar", Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
+		{Label: tr("退出 MonitorBar", "Quit MonitorBar"), Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
 	})
 	if runtime.GOOS == "linux" { // AppIndicator reports no clicks
 		a.tray.SetMenu(menu)

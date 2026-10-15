@@ -93,28 +93,25 @@ func (p *panel) header(c *ui.Context) {
 			ui.Text(c, s.monitor.Name).FontSize(15).FontWeight(600).LetterSpacing(-0.3).SingleLine()
 			ui.Text(c, p.caption()).FontSize(11).FontWeight(400).TextColor(muted).SingleLine()
 		})
-		ui.Box(c).Size(24, 30).Center().TextColor(muted).Label("更多").Cursor(ui.CursorPointer).Children(func() {
+		ui.Box(c).Size(24, 30).Center().TextColor(muted).Label(tr("更多", "More")).Cursor(ui.CursorPointer).Children(func() {
 			icon(c, "ellipsis").FontSize(16)
 		}).Menu(func(m *ui.Menu) {
-			if m.Item("重新检测").Chosen() {
+			if m.Item(tr("重新检测", "Rescan")).Chosen() {
 				s.detect()
 			}
-			if m.Item("系统显示器设置…").Chosen() {
+			if m.Item(tr("系统显示器设置…", "System display settings…")).Chosen() {
 				_ = mygo.Shell.OpenExternal(display.SettingsURL)
 			}
-			if m.Item("恢复默认画面").Chosen() {
-				s.resetSoftware()
-			}
 			m.Separator()
-			if m.Item("登录时启动").Checked(s.launchAtLogin).Chosen() {
+			if m.Item(tr("登录时启动", "Launch at login")).Checked(s.launchAtLogin).Chosen() {
 				s.toggleLaunchAtLogin()
 			}
 			m.Separator()
-			if m.Item("退出").Chosen() {
+			if m.Item(tr("退出", "Quit")).Chosen() {
 				mygo.App.Quit()
 			}
 		})
-		power := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Tooltip("立即熄屏").Label("立即熄屏")
+		power := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Tooltip(tr("立即熄屏", "Sleep display")).Label(tr("立即熄屏", "Sleep display"))
 		power.Background(ui.RGBA(255, 255, 255, 0.07))
 		if power.Hovered() {
 			power.Background(ui.RGBA(255, 255, 255, 0.12))
@@ -160,13 +157,13 @@ func (p *panel) footer(c *ui.Context) {
 	text := ""
 	switch {
 	case s.link != nil && s.ddc != nil:
-		text = "已连接 · 局域网 + DDC/CI"
+		text = tr("已连接 · 局域网 + DDC/CI", "Connected · LAN + DDC/CI")
 	case s.link != nil:
-		text = "已通过局域网连接 · 澎湃 OS 遥控"
+		text = tr("已通过局域网连接 · 澎湃 OS 遥控", "Connected over LAN · HyperOS remote")
 	case s.ddc != nil:
-		text = "已通过 DDC/CI 连接"
+		text = tr("已通过 DDC/CI 连接", "Connected over DDC/CI")
 	case s.detectingAny():
-		text = "正在检测显示器…"
+		text = tr("正在检测显示器…", "Detecting display…")
 	}
 	if text == "" {
 		ui.Box(c).Height(12)

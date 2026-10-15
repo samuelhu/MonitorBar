@@ -96,7 +96,7 @@ func (s sliderRow) show(c *ui.Context) bool {
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			if s.muteToggle {
-				mute := chip(c, false).Size(28, 24).Label("静音").Tooltip("静音")
+				mute := chip(c, false).Size(28, 24).Label(tr("静音", "Mute")).Tooltip(tr("静音", "Mute"))
 				mute.Children(func() { icon(c, "volume-x").FontSize(12) })
 				if mute.Clicked() && s.onMute != nil {
 					s.onMute()

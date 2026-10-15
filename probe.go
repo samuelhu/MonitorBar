@@ -10,33 +10,34 @@ import (
 
 // probe prints what the app can see and control, without UI (--probe).
 func probe() {
+	useSystemLanguage(systemLocale())
 	m := display.Target()
-	fmt.Printf("显示器: %s  接口: %s\n", m.Name, or(m.Connection, "未知"))
+	fmt.Printf(tr("显示器: %s  接口: %s\n", "Display: %s  Connection: %s\n"), m.Name, or(m.Connection, tr("未知", "unknown")))
 	if mode, ok := m.CurrentMode(); ok {
 		hidpi := ""
 		if mode.HiDPI() {
 			hidpi = " HiDPI"
 		}
-		fmt.Printf("当前模式: %s%s %dHz\n", mode.Title(), hidpi, mode.RefreshRate)
+		fmt.Printf(tr("当前模式: %s%s %dHz\n", "Current mode: %s%s %dHz\n"), mode.Title(), hidpi, mode.RefreshRate)
 	}
 	modes := m.Modes()
 	current, _ := m.CurrentMode()
 	w, h := m.NativeSize(modes, current)
-	fmt.Printf("原生分辨率: %d × %d（%s）\n", w, h, display.SizeLabel(w, h))
-	fmt.Printf("可用模式: %d 个  亮屏: %v  空闲: %.0f 秒\n", len(modes), !m.Asleep(), display.IdleSeconds())
+	fmt.Printf(tr("原生分辨率: %d × %d（%s）\n", "Native resolution: %d × %d (%s)\n"), w, h, display.SizeLabel(w, h))
+	fmt.Printf(tr("可用模式: %d 个  亮屏: %v  空闲: %.0f 秒\n", "Modes: %d  Awake: %v  Idle: %.0fs\n"), len(modes), !m.Asleep(), display.IdleSeconds())
 
 	if d, err := m.OpenDDC(); err != nil {
-		fmt.Println("DDC/CI: 显示器未响应")
+		fmt.Println(tr("DDC/CI: 显示器未响应", "DDC/CI: no answer"))
 	} else {
 		for _, v := range []struct {
 			code byte
 			name string
-		}{{display.VCPBrightness, "亮度"}, {display.VCPContrast, "对比度"}, {display.VCPVolume, "音量"}, {display.VCPInput, "输入源"}} {
+		}{{display.VCPBrightness, tr("亮度", "Brightness")}, {display.VCPContrast, tr("对比度", "Contrast")}, {display.VCPVolume, tr("音量", "Volume")}, {display.VCPInput, tr("输入源", "Input")}} {
 			if cur, max, ok := d.Get(v.code); ok {
 				fmt.Printf("DDC/CI %s: %d / %d\n", v.name, cur, max)
 			}
 		}
-		fmt.Println("DDC/CI 能力:", or(d.Capabilities(), "（未提供）"))
+		fmt.Println(tr("DDC/CI 能力:", "DDC/CI capabilities:"), or(d.Capabilities(), tr("（未提供）", "(none)")))
 		d.Close()
 	}
 
@@ -48,7 +49,7 @@ func probe() {
 	if host == "" || err != nil {
 		host, err = mitv.Discover()
 		if err != nil {
-			fmt.Println("局域网: 未发现澎湃 OS 显示器")
+			fmt.Println(tr("局域网: 未发现澎湃 OS 显示器", "LAN: no HyperOS display found"))
 			return
 		}
 		link = mitv.New(host)
@@ -56,16 +57,16 @@ func probe() {
 		prefs.NetworkHost = host
 		prefs.save()
 	}
-	fmt.Printf("局域网: %s @ %s（%.2fs）\n", name, host, time.Since(start).Seconds())
+	fmt.Printf(tr("局域网: %s @ %s（%.2fs）\n", "LAN: %s @ %s (%.2fs)\n"), name, host, time.Since(start).Seconds())
 	if sources, err := link.Sources(); err == nil {
-		fmt.Print("信号源:")
+		fmt.Print(tr("信号源:", "Inputs:"))
 		for _, s := range sources {
 			fmt.Printf(" %s=%d", s.Name, s.ID)
 		}
 		fmt.Println()
 	}
 	if v, err := link.Volume(); err == nil {
-		fmt.Printf("音量: %d\n", v)
+		fmt.Printf(tr("音量: %d\n", "Volume: %d\n"), v)
 	}
 }
 

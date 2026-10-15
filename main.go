@@ -43,12 +43,13 @@ func main() {
 // setOpenAtLogin is a command: the login item needs the app's event loop,
 // so it runs one, changes the setting, reports it and quits.
 func setOpenAtLogin(on bool) {
+	useSystemLanguage(systemLocale())
 	mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
 	mygo.App.WhenReady(func() {
 		if err := mygo.App.SetOpenAtLogin(on); err != nil {
-			fmt.Println("开机自启设置失败:", err)
+			fmt.Println(tr("开机自启设置失败:", "Open at login failed:"), err)
 		}
-		fmt.Println("开机自启:", map[bool]string{true: "已开启", false: "已关闭"}[mygo.App.OpenAtLogin()])
+		fmt.Println(tr("开机自启:", "Open at login:"), map[bool]string{true: tr("已开启", "on"), false: tr("已关闭", "off")}[mygo.App.OpenAtLogin()])
 		mygo.App.Quit()
 	})
 	if err := mygo.App.Run(); err != nil {

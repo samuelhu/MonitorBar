@@ -127,7 +127,7 @@ func InputName(code int) string {
 	if n, ok := names[code]; ok {
 		return n
 	}
-	return fmt.Sprintf("输入 %02X", code)
+	return fmt.Sprintf("Input %02X", code)
 }
 
 // ParseCapabilities reads the vcp(...) section of an MCCS capability

@@ -22,10 +22,22 @@ type scene struct {
 	tag                string // scientific label: e.g. "编程 · 5800K"
 }
 
+// scene names are set at launch from the system language (see nameScenes).
 var scenes = []scene{
 	{"编程", "code", 65, 10, "5800K"},
 	{"阅读", "book", 50, 25, "4900K"},
 	{"影音", "film", 100, 0, "D65"},
+}
+
+func nameScenes() {
+	names := [3][2]string{
+		{"编程", "Coding"},
+		{"阅读", "Reading"},
+		{"影音", "Movie"},
+	}
+	for i := range scenes {
+		scenes[i].name = tr(names[i][0], names[i][1])
+	}
 }
 
 // store holds what the panel shows and the actions that change it. Its
@@ -137,25 +149,18 @@ func (s *store) effectiveBrightness() float64 {
 	return s.prefs.SoftBrightness
 }
 
-func (s *store) resetSoftware() {
-	s.prefs.SoftBrightness, s.prefs.Warmth = 100, 0
-	s.applyGamma()
-}
-
-const (
-	gammaLimited = "Windows 限制了软件调光的幅度，已调到它允许的最暗。"
-	gammaFailed  = "调光失败：系统拒绝了这个设置。"
-)
+func gammaLimited() string { return tr("Windows 限制了软件调光的幅度，已调到它允许的最暗。", "Windows limited the software dimming; it is at the darkest it allows.") }
+func gammaFailed() string  { return tr("调光失败：系统拒绝了这个设置。", "Dimming failed: the system refused the setting.") }
 
 func (s *store) applyGamma() {
 	s.dirty = true
 	err := s.setGamma(s.prefs.SoftBrightness/100, s.prefs.Warmth/100)
 	switch {
 	case errors.Is(err, display.ErrGammaLimited):
-		s.notice = gammaLimited
+		s.notice = gammaLimited()
 	case err != nil:
-		s.notice = gammaFailed
-	case s.notice == gammaLimited || s.notice == gammaFailed:
+		s.notice = gammaFailed()
+	case s.notice == gammaLimited() || s.notice == gammaFailed():
 		s.notice = ""
 	}
 }
@@ -173,7 +178,7 @@ func (s *store) sources() []mitv.Source {
 // inputChannel names how inputs are switched, for the inputs card.
 func (s *store) inputChannel() string {
 	if s.link != nil {
-		return "局域网"
+		return tr("局域网", "LAN")
 	}
 	return "DDC/CI"
 }
@@ -181,9 +186,9 @@ func (s *store) inputChannel() string {
 // pictureNote says where brightness is applied: hardware backlight or gamma.
 func (s *store) pictureNote() string {
 	if s.hasBrightness {
-		return "硬件背光"
+		return tr("硬件背光", "Hardware backlight")
 	}
-	return "软件调光"
+	return tr("软件调光", "Software dimming")
 }
 
 // connect finds the display on the LAN: the host found last time first,
@@ -241,7 +246,7 @@ func (s *store) selectInput(src mitv.Source) {
 	}
 	go func() {
 		if err := link.Select(src.ID); err != nil {
-			s.post(func() { s.notice = "切换到 " + src.Name + " 失败：显示器没有响应" })
+			s.post(func() { s.notice = tr("切换到 ", "Switching to ")+src.Name+tr(" 失败：显示器没有响应", " failed: the display did not answer") })
 		}
 	}()
 }
@@ -296,7 +301,7 @@ func (s *store) chaseVolume() {
 			s.deviceVolume = actual
 			switch {
 			case failed:
-				s.notice = "调节音量失败：显示器没有响应"
+				s.notice = tr("调节音量失败：显示器没有响应", "Volume failed: the display did not answer")
 			case int(s.volumeTarget.Load()) != actual:
 				s.chaseVolume() // the slider moved while the last step was sent
 			default:
@@ -420,7 +425,7 @@ func (s *store) applyDDC(r ddcReading) {
 	s.controls = nil
 	for _, c := range controlCatalog {
 		if v, ok := r.values[c.code]; ok {
-			s.controls = append(s.controls, control{code: c.code, name: c.name, value: float64(v[0]), max: v[1]})
+			s.controls = append(s.controls, control{code: c.code, name: controlName(c.code, c.name), value: float64(v[0]), max: v[1]})
 		}
 	}
 }
@@ -469,9 +474,9 @@ func (s *store) setControl(i int) {
 
 func (s *store) applyMode(m display.Mode) {
 	if err := s.monitor.Apply(m); err != nil {
-		s.notice = "切换失败，显示器拒绝了该模式"
+		s.notice = tr("切换失败，显示器拒绝了该模式", "Switch failed: the display refused the mode")
 	} else {
-		s.notice = "已切换到 " + m.Title() + " · " + strconv.Itoa(m.RefreshRate) + " Hz"
+		s.notice = tr("已切换到 ", "Switched to ")+m.Title()+" · "+strconv.Itoa(m.RefreshRate)+" Hz"
 	}
 	s.refreshDisplay()
 }
@@ -512,7 +517,7 @@ func (s *store) computeCaption() string {
 		}
 	}
 	if len(parts) == 0 {
-		return "外接显示器"
+		return tr("外接显示器", "External display")
 	}
 	return strings.Join(parts, " · ")
 }
@@ -551,7 +556,7 @@ func (s *store) detectingAny() bool { return s.detecting || s.probingDDC }
 
 func (s *store) toggleLaunchAtLogin() {
 	if err := mygo.App.SetOpenAtLogin(!s.launchAtLogin); err != nil {
-		s.notice = "登录项设置失败：" + err.Error()
+		s.notice = tr("登录项设置失败：", "Login item failed: ")+err.Error()
 	}
 	s.launchAtLogin = mygo.App.OpenAtLogin()
 }
@@ -561,4 +566,21 @@ func (s *store) save() {
 		s.prefs.save()
 		s.dirty = false
 	}
+}
+
+// controlName localizes the picture-control labels.
+func controlName(code byte, zh string) string {
+	switch code {
+	case display.VCPContrast:
+		return tr("对比度", "Contrast")
+	case display.VCPSharpness:
+		return tr("锐度", "Sharpness")
+	case display.VCPRedGain:
+		return tr("红色增益", "Red gain")
+	case display.VCPGreenGain:
+		return tr("绿色增益", "Green gain")
+	case display.VCPBlueGain:
+		return tr("蓝色增益", "Blue gain")
+	}
+	return zh
 }

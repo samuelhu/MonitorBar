@@ -190,7 +190,7 @@ func TestNoticeGrowsPanelWithoutInput(t *testing.T) {
 	if err := tt.Click("阅读"); err != nil { // Click draws only the frames the view asks for
 		t.Fatal(err)
 	}
-	if !tt.HasText(gammaLimited) {
+	if !tt.HasText(gammaLimited()) {
 		t.Fatalf("no notice in %q", tt.Texts())
 	}
 	if p.height <= before {
@@ -222,4 +222,65 @@ func TestMuteIsVolumeZero(t *testing.T) {
 	if s.muted || s.volume != 40 {
 		t.Fatalf("after unmute: muted %v volume %v, want 40", s.muted, s.volume)
 	}
+}
+
+// The panel follows the system language: English locale shows English text.
+func TestEnglishFollowsSystemLanguage(t *testing.T) {
+	prev := lang
+	t.Cleanup(func() { lang = prev; nameScenes() })
+	useSystemLanguage("en-US")
+	p, _ := testPanel(t)
+	tt := newTester(p)
+	for _, want := range []string{
+		"Coding", "Reading", "Movie", "Picture", "Brightness", "Warmth",
+		"Monitor volume", "Input", "Refresh rate",
+		"Connected over LAN · HyperOS remote",
+	} {
+		if !tt.HasText(want) {
+			t.Errorf("missing English %q in %q", want, tt.Texts())
+		}
+	}
+	for _, bad := range []string{"画面", "亮度", "显示器音量", "编程", "已通过局域网连接"} {
+		if tt.HasText(bad) {
+			t.Errorf("Chinese %q still shown in English mode", bad)
+		}
+	}
+}
+
+func TestUseSystemLanguage(t *testing.T) {
+	prev := lang
+	t.Cleanup(func() { lang = prev; nameScenes() })
+	for _, c := range []struct{ locale, want string }{
+		{"zh-Hans", "zh"}, {"zh-CN", "zh"}, {"en-US", "en"}, {"en", "en"}, {"fr-FR", "en"},
+	} {
+		useSystemLanguage(c.locale)
+		if lang != c.want {
+			t.Errorf("locale %q -> lang %q, want %q", c.locale, lang, c.want)
+		}
+	}
+}
+
+// TestSnapshotsEN writes the English panel when $MONITORBAR_SNAPSHOTS is set.
+func TestSnapshotsEN(t *testing.T) {
+	dir := os.Getenv("MONITORBAR_SNAPSHOTS")
+	if dir == "" {
+		t.Skip("set MONITORBAR_SNAPSHOTS to a directory")
+	}
+	prev := lang
+	t.Cleanup(func() { lang = prev; nameScenes() })
+	useSystemLanguage("en-US")
+	p, _ := testPanel(t)
+	tt := newTester(p)
+	tt.SetScale(2)
+	tt.Frame()
+	img := tt.Image()
+	crop := img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
+	f, err := os.Create(filepath.Join(dir, "panel_en.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, crop); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
 }
