@@ -76,8 +76,8 @@ type sliderRow struct {
 	magneticZero     bool
 	format           func(float64) string // the value as shown, default an integer
 	unit             string               // small suffix next to the number
-	muteToggle       bool                 // show a mute button before the − step
-	onMute           func()               // called when the mute button is pressed
+	onMute           func()               // called when the sound icon is clicked
+	isMuted          bool
 }
 
 // show draws it and reports whether the user changed the value.
@@ -85,7 +85,29 @@ func (s sliderRow) show(c *ui.Context) bool {
 	changed := false
 	ui.Column(c).Gap(8).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			icon(c, s.icon).FontSize(14).TextColor(muted).Width(18)
+			if s.onMute != nil {
+				muteBtn := ui.Box(c).Size(22, 22).Radius(6).Center().Cursor(ui.CursorPointer)
+				tooltip := tr("静音", "Mute")
+				if s.isMuted {
+					tooltip = tr("恢复音量", "Restore volume")
+					muteBtn.Background(accent.Alpha(0.18)).TextColor(accent)
+				} else if muteBtn.Hovered() {
+					muteBtn.Background(ui.RGBA(255, 255, 255, 0.1)).TextColor(ink)
+				} else {
+					muteBtn.TextColor(muted)
+				}
+				muteBtn.Tooltip(tooltip).Label(tooltip)
+				muteBtn.Children(func() {
+					icon(c, s.icon).FontSize(14)
+				})
+				if muteBtn.Clicked() {
+					s.onMute()
+				}
+			} else {
+				ui.Box(c).Size(22, 22).Center().Children(func() {
+					icon(c, s.icon).FontSize(14).TextColor(muted)
+				})
+			}
 			ui.Text(c, s.title).FontSize(13).FontWeight(590).LetterSpacing(-0.1).Grow(1)
 			text := fmt.Sprint(int(math.Round(*s.value)))
 			if s.format != nil {
@@ -97,13 +119,6 @@ func (s sliderRow) show(c *ui.Context) bool {
 			}
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			if s.muteToggle {
-				mute := chip(c, false).Size(28, 24).Label(tr("静音", "Mute")).Tooltip(tr("静音", "Mute"))
-				mute.Children(func() { icon(c, "volume-x").FontSize(12) })
-				if mute.Clicked() && s.onMute != nil {
-					s.onMute()
-				}
-			}
 			if stepButton(c, "minus") {
 				v := math.Round(*s.value - s.step)
 				if s.magneticZero && math.Abs(v) < s.step/2 {

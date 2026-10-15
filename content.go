@@ -69,19 +69,22 @@ func (p *panel) volume(c *ui.Context) {
 	s := p.s
 	groupLabel(c, tr("音量", "Volume"), muteNote(s))
 	card(c, func() {
+		volumeIcon := "volume"
 		if s.muted {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				mute := chip(c, true).Size(28, 24).Label(tr("恢复音量", "Restore volume")).Tooltip(tr("恢复音量", "Restore volume"))
-				mute.Children(func() { icon(c, "volume-x").FontSize(13) })
-				if mute.Clicked() {
-					s.toggleMute()
-				}
-				ui.Text(c, tr("已静音", "Muted")).FontSize(12).FontWeight(600).LetterSpacing(-0.1).Grow(1)
-				ui.Text(c, fmt.Sprintf(tr("原音量 %d%%", "Was %d%%"), int(s.returnTo))).FontSize(11).TextColor(muted)
-			})
-		} else if (sliderRow{key: "volume", title: tr("显示器音量", "Monitor volume"), icon: "volume",
-			value: &s.volume, lo: 0, hi: 100, step: 5, unit: "%",
-			muteToggle: true, onMute: s.toggleMute}).show(c) {
+			volumeIcon = "volume-x"
+		}
+		if (sliderRow{
+			key:     "volume",
+			title:   tr("显示器音量", "Monitor volume"),
+			icon:    volumeIcon,
+			value:   &s.volume,
+			lo:      0,
+			hi:      100,
+			step:    5,
+			unit:    "%",
+			onMute:  s.toggleMute,
+			isMuted: s.muted,
+		}).show(c) {
 			s.setVolume(s.volume)
 		}
 	})
@@ -89,6 +92,9 @@ func (p *panel) volume(c *ui.Context) {
 
 func muteNote(s *store) string {
 	if s.muted {
+		if s.returnTo > 0 {
+			return fmt.Sprintf(tr("已静音 · 原音量 %d%%", "Muted · was %d%%"), int(s.returnTo))
+		}
 		return tr("已静音", "Muted")
 	}
 	return ""

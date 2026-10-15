@@ -152,6 +152,16 @@ func TestSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
+
+	if err := tt.Click("静音"); err == nil {
+		tt.Frame()
+		img = tt.Image()
+		crop = img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
+		if f, err := os.Create(filepath.Join(dir, "panel_muted.png")); err == nil {
+			_ = png.Encode(f, crop)
+			f.Close()
+		}
+	}
 }
 
 // The panel must report its natural height even while its window is
@@ -246,6 +256,20 @@ func TestEnglishFollowsSystemLanguage(t *testing.T) {
 			t.Errorf("Chinese %q still shown in English mode", bad)
 		}
 	}
+	if err := tt.Click("Mute"); err != nil {
+		t.Fatalf("clicking Mute in English: %v", err)
+	}
+	tt.Frame()
+	if !p.s.muted || !tt.HasText("Muted") {
+		t.Errorf("after English mute: muted %v texts %q", p.s.muted, tt.Texts())
+	}
+	if err := tt.Click("Restore volume"); err != nil {
+		t.Fatalf("clicking Restore volume in English: %v", err)
+	}
+	tt.Frame()
+	if p.s.muted {
+		t.Errorf("after English unmute: still muted")
+	}
 }
 
 func TestUseSystemLanguage(t *testing.T) {
@@ -284,6 +308,16 @@ func TestSnapshotsEN(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
+
+	if err := tt.Click("Mute"); err == nil {
+		tt.Frame()
+		img = tt.Image()
+		crop = img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
+		if f, err := os.Create(filepath.Join(dir, "panel_en_muted.png")); err == nil {
+			_ = png.Encode(f, crop)
+			f.Close()
+		}
+	}
 }
 
 // The input chip shows the one the user last picked: HyperOS has no
