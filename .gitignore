@@ -1,0 +1,7 @@
+/build/
+/.mygo/
+mygo_windows_*.syso
+.DS_Store
+/MonitorBar
+*.exe
+.idea/
