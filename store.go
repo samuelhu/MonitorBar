@@ -79,6 +79,7 @@ type store struct {
 	// volume (when the LAN remote has none), and picture controls.
 	ddc           *display.DDC
 	probingDDC    bool
+	refreshingDDC bool
 	brightness    float64 // hardware %, meaningful when hasBrightness
 	hasBrightness bool
 	ddcInputs     []mitv.Source
@@ -471,12 +472,14 @@ func (s *store) applyDDC(r ddcReading) {
 // refreshDDC rereads the values the monitor's own buttons may have changed.
 func (s *store) refreshDDC() {
 	d := s.ddc
-	if d == nil || s.probingDDC {
+	if d == nil || s.probingDDC || s.refreshingDDC {
 		return
 	}
+	s.refreshingDDC = true
 	go func() {
 		r := readDDC(d, false)
 		s.post(func() {
+			s.refreshingDDC = false
 			if s.ddc == d {
 				s.applyDDC(r)
 			}
@@ -524,6 +527,12 @@ func (s *store) sleepDisplay() { _ = display.SleepNow() }
 // MARK: Lifecycle
 
 func (s *store) refreshDisplay() {
+	for _, m := range s.modes {
+		m.Release()
+	}
+	if s.hasCurrent {
+		s.current.Release()
+	}
 	s.monitor = display.Target()
 	s.modes = s.monitor.Modes()
 	s.current, s.hasCurrent = s.monitor.CurrentMode()

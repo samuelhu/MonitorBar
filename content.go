@@ -28,7 +28,11 @@ func (p *panel) scenes(c *ui.Context) {
 			active := s.isActive(sc)
 			e := chip(c.Key(sc.name), active).Grow(1).Height(50).Gap(3)
 			e.Children(func() {
-				icon(c, sc.icon).FontSize(15)
+				icColor := muted
+				if active {
+					icColor = accent
+				}
+				icon(c, sc.icon).FontSize(15).TextColor(icColor)
 				ui.Text(c, sc.name).FontSize(13).FontWeight(600).LetterSpacing(-0.1)
 			})
 			if e.Clicked() {

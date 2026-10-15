@@ -93,8 +93,13 @@ func (p *panel) header(c *ui.Context) {
 			ui.Text(c, s.monitor.Name).FontSize(16).FontWeight(600).LetterSpacing(-0.2).SingleLine()
 			ui.Text(c, p.caption()).FontSize(12).FontWeight(400).TextColor(muted).SingleLine()
 		})
-		ui.Box(c).Size(24, 30).Center().TextColor(muted).Label(tr("更多", "More")).Cursor(ui.CursorPointer).Children(func() {
-			icon(c, "ellipsis").FontSize(16)
+		more := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Label(tr("更多", "More")).Tooltip(tr("更多", "More"))
+		more.Background(ui.RGBA(255, 255, 255, 0.07)).TextColor(muted)
+		if more.Hovered() {
+			more.Background(ui.RGBA(255, 255, 255, 0.12)).TextColor(ink)
+		}
+		more.Children(func() {
+			icon(c, "ellipsis").FontSize(15)
 		}).Menu(func(m *ui.Menu) {
 			if m.Item(tr("重新检测", "Rescan")).Chosen() {
 				s.detect()
@@ -112,11 +117,11 @@ func (p *panel) header(c *ui.Context) {
 			}
 		})
 		power := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Tooltip(tr("立即熄屏", "Sleep display")).Label(tr("立即熄屏", "Sleep display"))
-		power.Background(ui.RGBA(255, 255, 255, 0.07))
+		power.Background(ui.RGBA(255, 255, 255, 0.07)).TextColor(muted)
 		if power.Hovered() {
-			power.Background(ui.RGBA(255, 255, 255, 0.12))
+			power.Background(ui.RGBA(255, 255, 255, 0.12)).TextColor(ink)
 		}
-		power.Children(func() { icon(c, "power").FontSize(15) })
+		power.Children(func() { icon(c, "power").FontSize(14) })
 		if power.Clicked() {
 			s.sleepDisplay()
 		}

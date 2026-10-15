@@ -119,7 +119,12 @@ func (d *ioavDDC) capabilities() string {
 	return string(caps)
 }
 
-func (d *ioavDDC) close() { cfRelease(d.service) }
+func (d *ioavDDC) close() {
+	if d.service != 0 {
+		cfRelease(d.service)
+		d.service = 0
+	}
+}
 
 // send writes a DDC/CI packet: length, payload, checksum. It goes out twice,
 // as some monitors drop the first one after idling.

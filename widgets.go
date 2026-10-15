@@ -64,7 +64,11 @@ func chip(c *ui.Context, selected bool) ui.Element {
 // buttons.
 func chipText(c *ui.Context, label string, selected bool) bool {
 	e := chip(c, selected).Grow(1).Height(32)
-	e.Children(func() { ui.Text(c, label).FontSize(13).FontWeight(500).LetterSpacing(-0.1).SingleLine() })
+	weight := 500
+	if selected {
+		weight = 600
+	}
+	e.Children(func() { ui.Text(c, label).FontSize(13).FontWeight(weight).LetterSpacing(-0.1).SingleLine() })
 	return e.Clicked()
 }
 
@@ -90,7 +94,11 @@ func (s sliderRow) show(c *ui.Context) bool {
 				tooltip := tr("静音", "Mute")
 				if s.isMuted {
 					tooltip = tr("恢复音量", "Restore volume")
-					muteBtn.Background(accent.Alpha(0.18)).TextColor(accent)
+					bg := accent.Alpha(0.18)
+					if muteBtn.Hovered() {
+						bg = accent.Alpha(0.28)
+					}
+					muteBtn.Background(bg).TextColor(accent)
 				} else if muteBtn.Hovered() {
 					muteBtn.Background(ui.RGBA(255, 255, 255, 0.1)).TextColor(ink)
 				} else {
@@ -113,7 +121,11 @@ func (s sliderRow) show(c *ui.Context) bool {
 			if s.format != nil {
 				text = s.format(*s.value)
 			}
-			ui.Text(c, text).FontSize(18).FontWeight(600).LetterSpacing(-0.2).FontFeatures("tnum")
+			numColor := ink
+			if s.isMuted {
+				numColor = muted
+			}
+			ui.Text(c, text).FontSize(18).FontWeight(600).LetterSpacing(-0.2).FontFeatures("tnum").TextColor(numColor)
 			if s.unit != "" {
 				ui.Text(c, s.unit).FontSize(11).FontWeight(500).TextColor(muted)
 			}
@@ -148,6 +160,10 @@ func (s sliderRow) show(c *ui.Context) bool {
 
 func stepButton(c *ui.Context, name string) bool {
 	e := chip(c, false).Size(28, 24)
-	e.Children(func() { icon(c, name).FontSize(12) })
+	icColor := muted
+	if e.Hovered() || e.Pressed() {
+		icColor = ink
+	}
+	e.Children(func() { icon(c, name).FontSize(12).TextColor(icColor) })
 	return e.Clicked()
 }

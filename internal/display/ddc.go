@@ -101,6 +101,11 @@ func (d *DDC) writer() {
 		case <-d.wake:
 		}
 		for {
+			select {
+			case <-d.done:
+				return
+			default:
+			}
 			d.mu.Lock()
 			var code byte
 			var value int

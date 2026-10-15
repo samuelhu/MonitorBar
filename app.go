@@ -70,6 +70,12 @@ func (a *app) ready(show bool) {
 		if a.s.ddc != nil {
 			a.s.ddc.Close()
 		}
+		for _, m := range a.s.modes {
+			m.Release()
+		}
+		if a.s.hasCurrent {
+			a.s.current.Release()
+		}
 		a.tray.Destroy()
 	})
 

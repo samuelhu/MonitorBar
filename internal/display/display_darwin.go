@@ -253,6 +253,13 @@ func newMode(ref uintptr) Mode {
 	}
 }
 
+// Release frees the retained native CGDisplayModeRef.
+func (m Mode) Release() {
+	if m.native != 0 {
+		cfRelease(m.native)
+	}
+}
+
 func (m Monitor) Apply(mode Mode) error {
 	load()
 	var config uintptr

@@ -271,6 +271,9 @@ func newMode(dm devMode) Mode {
 	}
 }
 
+// Release is a no-op on Windows.
+func (m Mode) Release() {}
+
 func (m Monitor) Apply(mode Mode) error {
 	dm := mode.native
 	dm.Fields = dmFieldsForMode
