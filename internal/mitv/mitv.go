@@ -34,6 +34,7 @@ type Source struct {
 var sharedClient = &http.Client{
 	Timeout: 4 * time.Second,
 	Transport: &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
 		MaxIdleConns:        16,
 		MaxIdleConnsPerHost: 8,
 		IdleConnTimeout:     90 * time.Second,
@@ -47,12 +48,16 @@ type Link struct {
 	client *http.Client
 }
 
-func New(host string) *Link {
+func cleanHost(host string) string {
 	host = strings.TrimSpace(host)
-	if strings.ContainsAny(host, " /?#@\r\n\t") {
-		host = ""
+	if host == "" || strings.ContainsAny(host, " :/?#@[]\\\r\n\t") {
+		return ""
 	}
-	return &Link{Host: host, client: sharedClient}
+	return host
+}
+
+func New(host string) *Link {
+	return &Link{Host: cleanHost(host), client: sharedClient}
 }
 
 // DeviceName answers whether the device is reachable, with its name.
@@ -92,17 +97,30 @@ func (l *Link) Select(sourceID int) error {
 	return l.call("controller", url.Values{"action": {"changesource2"}, "sourceid": {strconv.Itoa(sourceID)}}, nil)
 }
 
-// Volume reads the volume on a 0...100 scale, rounded to the nearest integer.
-func (l *Link) Volume() (int, error) {
+// VolumeRaw reads the device's raw volume step and maximum volume step.
+func (l *Link) VolumeRaw() (volume, maxVolume int, err error) {
 	var data struct {
 		Volume    int `json:"volume"`
 		MaxVolume int `json:"maxVolume"`
 	}
 	if err := l.call("controller", url.Values{"action": {"getvolume"}}, &data); err != nil {
+		return 0, 0, err
+	}
+	if data.MaxVolume <= 0 || data.MaxVolume > 1000 || data.Volume < 0 {
+		return 0, 0, errors.New("mitv: invalid volume range")
+	}
+	vol := min(data.Volume, data.MaxVolume)
+	return vol, data.MaxVolume, nil
+}
+
+// Volume reads the volume on a 0...100 scale, rounded to the nearest integer.
+func (l *Link) Volume() (int, error) {
+	vol, maxVol, err := l.VolumeRaw()
+	if err != nil {
 		return 0, err
 	}
-	maxVol := max(data.MaxVolume, 1)
-	return (data.Volume*100 + maxVol/2) / maxVol, nil
+	pct := (vol*100 + maxVol/2) / maxVol
+	return max(0, min(pct, 100)), nil
 }
 
 // Press sends a remote key such as "volumeup", "volumedown", "home" or "back".
@@ -115,12 +133,13 @@ func (l *Link) call(path string, query url.Values, data any) error {
 }
 
 func (l *Link) callContext(ctx context.Context, path string, query url.Values, data any) error {
-	if l.Host == "" {
+	host := cleanHost(l.Host)
+	if host == "" {
 		return errors.New("mitv: invalid host")
 	}
 	u := url.URL{
 		Scheme:   "http",
-		Host:     net.JoinHostPort(l.Host, strconv.Itoa(Port)),
+		Host:     net.JoinHostPort(host, strconv.Itoa(Port)),
 		Path:     "/" + path,
 		RawQuery: query.Encode(),
 	}

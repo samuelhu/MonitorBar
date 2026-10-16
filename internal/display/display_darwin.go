@@ -229,7 +229,11 @@ func (m Monitor) Modes() []Mode {
 func (m Monitor) CurrentMode() (Mode, bool) {
 	load()
 	ref := cgDisplayCopyDisplayMode(m.handle)
-	return newMode(ref), ref != 0
+	if ref == 0 {
+		return Mode{}, false
+	}
+	defer cfRelease(ref)
+	return newMode(ref).WithoutHandle(), true
 }
 
 func newMode(ref uintptr) Mode {
@@ -294,19 +298,20 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 	gammaMu.Lock()
 	defer gammaMu.Unlock()
 
-	// Skip redundant system calls if setting hasn't changed on the same monitor.
-	if gammaBase[0] != nil && gammaMonitor == m.handle && brightness == lastBrightness && warmth == lastWarmth {
+	capacity := cgDisplayGammaTableCapacity(m.handle)
+	if capacity == 0 {
+		return errors.New("display: gamma table unsupported")
+	}
+
+	// Skip redundant system calls if setting and LUT capacity haven't changed on the same monitor.
+	if gammaBase[0] != nil && gammaMonitor == m.handle && int(capacity) == len(gammaBase[0]) && brightness == lastBrightness && warmth == lastWarmth {
 		return nil
 	}
 
-	if gammaBase[0] == nil || gammaMonitor != m.handle {
+	if gammaBase[0] == nil || gammaMonitor != m.handle || int(capacity) != len(gammaBase[0]) {
 		if gammaApplied {
 			cgDisplayRestoreColorSyncSettings()
 			gammaApplied = false
-		}
-		capacity := cgDisplayGammaTableCapacity(m.handle)
-		if capacity == 0 {
-			return errors.New("display: gamma table unsupported")
 		}
 		r, g, b := make([]float32, capacity), make([]float32, capacity), make([]float32, capacity)
 		var n uint32
@@ -363,8 +368,10 @@ func RestoreGamma() {
 	}
 }
 
-// ResetGammaBase forces the next SetGamma call to push the transfer table to
-// hardware again without flashing to 100% via cgDisplayRestoreColorSyncSettings.
+// ResetGammaBase invalidates the last-pushed brightness/warmth cache so the
+// next SetGamma call pushes the transfer table to hardware again without
+// flashing to 100% via cgDisplayRestoreColorSyncSettings (re-capturing the
+// base table only if the display handle or LUT capacity changed).
 func ResetGammaBase() {
 	gammaMu.Lock()
 	lastBrightness = -1.0
@@ -387,6 +394,8 @@ func IdleSeconds() float64 {
 func SleepNow() error { return exec.Command("/usr/bin/pmset", "displaysleepnow").Start() }
 
 var (
+	outsideWatchMu   sync.Mutex
+	outsideClickFn   func()
 	outsideWatchOnce sync.Once
 	outsideMonitor   objc.ID
 )
@@ -396,12 +405,20 @@ var (
 // when clicking elsewhere without stealing key-window focus from the active app.
 func WatchOutsideClicks(fn func()) {
 	load()
+	outsideWatchMu.Lock()
+	outsideClickFn = fn
+	outsideWatchMu.Unlock()
 	outsideWatchOnce.Do(func() {
 		const mask = 1<<1 | 1<<3 | 1<<25 // NSEventMaskLeftMouseDown | RightMouseDown | OtherMouseDown
 		selAdd := objc.RegisterName("addGlobalMonitorForEventsMatchingMask:handler:")
 		selRetain := objc.RegisterName("retain")
 		blk := objc.NewBlock(func(_ objc.Block, _ objc.ID) {
-			fn()
+			outsideWatchMu.Lock()
+			cb := outsideClickFn
+			outsideWatchMu.Unlock()
+			if cb != nil {
+				cb()
+			}
 		})
 		mon := objc.ID(objc.GetClass("NSEvent")).Send(selAdd, uintptr(mask), uintptr(blk))
 		if mon != 0 {

@@ -178,11 +178,13 @@ func (p *panel) refreshRates(c *ui.Context) {
 	displayRates := s.cachedShowRates
 	if len(displayRates) > 1 {
 		groupLabel(c, tr("刷新率", "Refresh rate"), strconv.Itoa(rate)+" Hz")
+		var chosen *int
 		card(c, func() {
 			chips := func() {
-				for _, m := range displayRates {
+				for i, m := range displayRates {
 					if chipText(c.Key(m.ID()), strconv.Itoa(m.RefreshRate)+" Hz", m.RefreshRate == rate) {
-						s.applyMode(m)
+						idx := i
+						chosen = &idx
 					}
 				}
 			}
@@ -192,6 +194,9 @@ func (p *panel) refreshRates(c *ui.Context) {
 				ui.Grid(c).Columns(min(len(displayRates), 4)).Gap(6).Children(chips)
 			}
 		})
+		if chosen != nil {
+			s.applyMode(displayRates[*chosen])
+		}
 	}
 }
 

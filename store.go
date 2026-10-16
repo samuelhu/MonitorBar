@@ -56,8 +56,7 @@ type store struct {
 	hasCurrent bool
 
 	captionStr      string
-	cachedRates     []display.Mode
-	cachedShowRates []display.Mode // the tiers the panel lists
+	cachedShowRates []display.Mode // the tiers the panel lists (handle-free copies)
 
 	link          *mitv.Link // the display's LAN remote, nil until found
 	detecting     bool
@@ -65,17 +64,20 @@ type store struct {
 	input         int  // the input chosen in the app, 0 before any
 	inputVerified bool // true only when read directly from hardware (DDC/CI VCP 0x60)
 	volume        float64
-	hasVolume bool
-	muted     bool // volume 0 as mute; returnTo is the level to restore
-	returnTo  float64
+	hasVolume     bool
+	muted         bool // volume 0 as mute; returnTo is the level to restore
+	returnTo      float64
 
 	launchAtLogin bool
 	notice        string
 	dirty         bool // prefs changed since the last save
+	gammaTimer    *time.Timer
+	closed        bool
 
-	volumeTarget atomic.Int64
-	deviceVolume int // the display's volume as last known
-	chasing      bool
+	volumeTarget    atomic.Int64
+	deviceVolume    int // the display's volume in hardware steps as last known
+	deviceMaxVolume int // the display's max volume step (default 100 when 0)
+	chasing         bool
 
 	// DDC/CI, when the monitor answers it: hardware brightness, inputs and
 	// volume (when the LAN remote has none), and picture controls.
@@ -164,6 +166,9 @@ func gammaFailed() string {
 }
 
 func (s *store) applyGamma() {
+	if s.closed {
+		return
+	}
 	s.dirty = true
 	brightness := s.prefs.SoftBrightness / 100
 	if s.hasBrightness {
@@ -307,13 +312,13 @@ func (s *store) connect() {
 			}
 		}
 		var sources []mitv.Source
-		volume, volumeErr := 0, error(nil)
+		rawVol, maxVol, volumeErr := 0, 0, error(nil)
 		if link != nil {
 			var err error
 			if sources, err = link.Sources(); err != nil || len(sources) == 0 {
 				link = nil
 			} else {
-				volume, volumeErr = link.Volume()
+				rawVol, maxVol, volumeErr = link.VolumeRaw()
 			}
 		}
 		s.post(func() {
@@ -330,9 +335,10 @@ func (s *store) connect() {
 			s.save()
 			slices.SortFunc(sources, func(a, b mitv.Source) int { return a.ID - b.ID })
 			s.inputs = sources
-			s.restoreLastInput(s.inputs)
-			if volumeErr == nil {
-				s.deviceVolume, s.volume, s.hasVolume = volume, float64(volume), true
+			if volumeErr == nil && maxVol > 0 {
+				s.deviceVolume, s.deviceMaxVolume = rawVol, maxVol
+				pct := max(0, min((rawVol*100+maxVol/2)/maxVol, 100))
+				s.volume, s.hasVolume = float64(pct), true
 			}
 		})
 	}()
@@ -340,15 +346,16 @@ func (s *store) connect() {
 
 func (s *store) selectInput(src mitv.Source) {
 	s.input = src.ID
-	s.prefs.LastInput, s.dirty = src.ID, true
 	link := s.link
 	if link == nil {
+		s.prefs.LastInput, s.dirty = src.ID, true
 		if s.ddc != nil {
 			s.ddc.Set(display.VCPInput, src.ID)
 		}
 		return
 	}
-	// LAN switching is fire-and-forget; never show a fake verified highlight.
+	// LAN switching is fire-and-forget; never show a fake verified highlight
+	// or overwrite DDC VCP LastInput with LAN source IDs.
 	s.inputVerified = false
 	label := formatSourceName(src.Name)
 	s.notice = tr("已向显示器发送切换指令：", "Switch command sent: ") + label
@@ -387,16 +394,31 @@ func (s *store) toggleMute() {
 	s.setVolume(0)
 }
 
-// chaseVolume steps toward the latest target: the API only has ±1 keys.
+func (s *store) targetVolumeSteps() (target, maxVol int) {
+	maxVol = s.deviceMaxVolume
+	if maxVol <= 0 {
+		maxVol = 100
+	}
+	pct := max(0, min(int(s.volumeTarget.Load()), 100))
+	target = (pct*maxVol + 50) / 100
+	return max(0, min(target, maxVol)), maxVol
+}
+
+// chaseVolume steps toward the latest target in hardware steps: the API only has ±1 keys.
 func (s *store) chaseVolume() {
 	if s.link == nil || s.chasing {
 		return
 	}
 	s.chasing = true
-	link, actual := s.link, s.deviceVolume
+	_, maxVol := s.targetVolumeSteps()
+	link, actual := s.link, max(0, min(s.deviceVolume, maxVol))
+	targetStep := func() int {
+		pct := max(0, min(int(s.volumeTarget.Load()), 100))
+		return max(0, min((pct*maxVol+50)/100, maxVol))
+	}
 	go func() {
 		failed := false
-		for target := int(s.volumeTarget.Load()); target != actual; target = int(s.volumeTarget.Load()) {
+		for target := targetStep(); target != actual; target = targetStep() {
 			key, step := "volumeup", 1
 			if target < actual {
 				key, step = "volumedown", -1
@@ -410,10 +432,11 @@ func (s *store) chaseVolume() {
 		s.post(func() {
 			s.chasing = false
 			s.deviceVolume = actual
+			target, _ := s.targetVolumeSteps()
 			switch {
 			case failed:
 				s.notice = tr("调节音量失败：显示器没有响应", "Volume failed: the display did not answer")
-			case int(s.volumeTarget.Load()) != actual:
+			case target != actual:
 				s.chaseVolume() // the slider moved while the last step was sent
 			default:
 				s.readVolume()
@@ -428,14 +451,18 @@ func (s *store) readVolume() {
 		return
 	}
 	go func() {
-		v, err := link.Volume()
-		if err != nil {
+		rawVol, maxVol, err := link.VolumeRaw()
+		if err != nil || maxVol <= 0 {
 			return
 		}
 		s.post(func() {
-			s.deviceVolume, s.hasVolume = v, true
+			if s.link != link {
+				return
+			}
+			s.deviceVolume, s.deviceMaxVolume, s.hasVolume = rawVol, maxVol, true
 			if !s.chasing {
-				s.volume = float64(v)
+				pct := max(0, min((rawVol*100+maxVol/2)/maxVol, 100))
+				s.volume = float64(pct)
 			}
 		})
 	}()
@@ -611,10 +638,17 @@ func (s *store) setControl(i int) {
 // MARK: Display modes
 
 func (s *store) applyMode(m display.Mode) {
-	if err := s.monitor.Apply(m); err != nil {
+	target := m
+	for _, live := range s.modes {
+		if live.ID() == m.ID() {
+			target = live
+			break
+		}
+	}
+	if err := s.monitor.Apply(target); err != nil {
 		s.notice = tr("切换失败，显示器拒绝了该模式", "Switch failed: the display refused the mode")
 	} else {
-		s.notice = tr("已切换到 ", "Switched to ") + m.Title() + " · " + strconv.Itoa(m.RefreshRate) + " Hz"
+		s.notice = tr("已切换到 ", "Switched to ") + target.Title() + " · " + strconv.Itoa(target.RefreshRate) + " Hz"
 	}
 	s.refreshDisplay()
 }
@@ -623,17 +657,40 @@ func (s *store) sleepDisplay() { _ = display.SleepNow() }
 
 // MARK: Lifecycle
 
-func (s *store) refreshDisplay() {
+func (s *store) releaseModes() {
 	for _, m := range s.modes {
 		m.Release()
 	}
 	if s.hasCurrent {
 		s.current.Release()
 	}
+	s.modes = nil
+	s.cachedShowRates = nil
+	s.current = display.Mode{}
+	s.hasCurrent = false
+}
+
+func (s *store) refreshDisplay() {
+	s.releaseModes()
 	s.monitor = display.Target()
 	s.modes = s.monitor.Modes()
 	s.current, s.hasCurrent = s.monitor.CurrentMode()
 	s.updateDisplayCache()
+}
+
+func (s *store) shutdown() {
+	s.closed = true
+	if s.gammaTimer != nil {
+		s.gammaTimer.Stop()
+		s.gammaTimer = nil
+	}
+	s.save()
+	display.RestoreGamma()
+	if s.ddc != nil {
+		s.ddc.Close()
+		s.ddc = nil
+	}
+	s.releaseModes()
 }
 
 func (s *store) restoreLastInput(sources []mitv.Source) {
@@ -654,19 +711,20 @@ func (s *store) restoreLastInput(sources []mitv.Source) {
 
 func (s *store) updateDisplayCache() {
 	s.captionStr = s.computeCaption()
-	s.cachedRates = display.RefreshRates(s.modes, s.current)
+	rates := display.RefreshRates(s.modes, s.current)
 	rate := 60
 	if s.hasCurrent {
 		rate = s.current.RefreshRate
 	}
 
-	// Deduplicate modes by refresh rate (one chip per frequency).
+	// Deduplicate modes by refresh rate (one chip per frequency), stripping
+	// native handles so cachedShowRates never aliases handles owned by s.modes.
 	var unique []display.Mode
 	seen := map[int]bool{}
-	for _, m := range s.cachedRates {
+	for _, m := range rates {
 		if !seen[m.RefreshRate] {
 			seen[m.RefreshRate] = true
-			unique = append(unique, m)
+			unique = append(unique, m.WithoutHandle())
 		}
 	}
 
@@ -731,9 +789,14 @@ func (s *store) computeCaption() string {
 	return strings.Join(parts, " · ")
 }
 
-// displaysChanged follows plugging, mode changes and wake: the gamma table
-// was reset, so capture it again and reapply.
+// displaysChanged follows plugging, mode changes and wake: macOS or ColorSync
+// may have reset the hardware LUT, so invalidate the last-pushed cache and
+// re-push the gamma table (re-capturing the base table if the display handle
+// or LUT capacity changed).
 func (s *store) displaysChanged() {
+	if s.closed {
+		return
+	}
 	previous := s.monitor
 	s.refreshDisplay()
 	display.ResetGammaBase()
@@ -743,9 +806,15 @@ func (s *store) displaysChanged() {
 	}
 	// On macOS, ColorSync may reload the display ICC profile ~300-600ms after
 	// wake or display reconfiguration, overwriting early gamma writes.
-	if s.prefs != nil && s.prefs.path != "" {
-		time.AfterFunc(600*time.Millisecond, func() {
+	if s.gammaTimer != nil {
+		s.gammaTimer.Stop()
+	}
+	if s.prefs != nil && s.prefs.path != "" && !s.closed {
+		s.gammaTimer = time.AfterFunc(600*time.Millisecond, func() {
 			s.post(func() {
+				if s.closed {
+					return
+				}
 				display.ResetGammaBase()
 				s.applyGamma()
 			})

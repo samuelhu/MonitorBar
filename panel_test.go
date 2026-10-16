@@ -334,25 +334,34 @@ func TestSnapshotsEN(t *testing.T) {
 	}
 }
 
-// Clicking a LAN input records LastInput and sends the switch command, while
-// clearing inputVerified so no fake active highlight is shown without DDC readback.
+// Clicking a LAN input sends the switch command and clears inputVerified so no
+// fake active highlight is shown, without overwriting DDC's LastInput.
 func TestInputSelectionClearsUnverifiedHighlight(t *testing.T) {
 	p, _ := testPanel(t)
 	s := p.s
-	s.inputVerified = true // e.g. from an earlier DDC probe
-	if s.prefs.LastInput != 0 {
-		t.Fatalf("fresh store already has LastInput %d", s.prefs.LastInput)
-	}
+	s.inputVerified = true    // e.g. from an earlier DDC probe
+	s.prefs.LastInput = 0x11  // DDC VCP 0x60 HDMI 1 code must not be overwritten by LAN ID
 	tt := newTester(p)
 	if err := tt.Click("DP"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if s.input != 29 || s.prefs.LastInput != 29 {
-		t.Fatalf("after clicking DP: input %d LastInput %d, want 29", s.input, s.prefs.LastInput)
+	if s.input != 29 {
+		t.Fatalf("after clicking DP: input %d, want 29", s.input)
+	}
+	if s.prefs.LastInput != 0x11 {
+		t.Fatalf("LAN click overwrote DDC LastInput: got %d, want 0x11 (17)", s.prefs.LastInput)
 	}
 	if s.inputVerified {
 		t.Fatalf("expected inputVerified to be cleared on LAN input click")
+	}
+
+	// In DDC mode (link == nil), clicking an input chip does persist LastInput.
+	s.link = nil
+	s.ddcInputs = []mitv.Source{{ID: 0x0F, Name: "DP"}, {ID: 0x11, Name: "HDMI 1"}}
+	s.selectInput(s.ddcInputs[0])
+	if s.prefs.LastInput != 0x0F {
+		t.Fatalf("DDC click did not persist LastInput: got %d, want 0x0F (15)", s.prefs.LastInput)
 	}
 }
 
@@ -467,6 +476,37 @@ func TestHostPortDefaultAndManualDesignation(t *testing.T) {
 	}
 	if !strings.Contains(s.inputNote(), "HDMI 2") {
 		t.Fatalf("expected inputNote to contain HDMI 2, got %q", s.inputNote())
+	}
+}
+
+func TestTargetVolumeStepsScalesToHardwareMaxVolume(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	s.deviceMaxVolume = 15
+
+	s.volumeTarget.Store(40)
+	if step, maxV := s.targetVolumeSteps(); step != 6 || maxV != 15 {
+		t.Fatalf("40%% of 15: got %d/%d, want 6/15", step, maxV)
+	}
+	s.volumeTarget.Store(60)
+	if step, maxV := s.targetVolumeSteps(); step != 9 || maxV != 15 {
+		t.Fatalf("60%% of 15: got %d/%d, want 9/15", step, maxV)
+	}
+	s.volumeTarget.Store(5000) // out-of-range target is clamped to 100% -> 15
+	if step, maxV := s.targetVolumeSteps(); step != 15 || maxV != 15 {
+		t.Fatalf("clamped target: got %d/%d, want 15/15", step, maxV)
+	}
+}
+
+func TestShutdownBlocksFurtherGammaApplication(t *testing.T) {
+	p, gamma := testPanel(t)
+	s := p.s
+	*gamma = [2]float64{1, 0}
+	s.shutdown()
+	s.prefs.SoftBrightness = 30
+	s.applyGamma()
+	if *gamma != [2]float64{1, 0} {
+		t.Fatalf("expected applyGamma after shutdown to be ignored, got %v", *gamma)
 	}
 }
 

@@ -86,6 +86,14 @@ func (m Mode) ID() string {
 }
 func (m Mode) Title() string { return fmt.Sprintf("%d × %d", m.Width, m.Height) }
 
+// WithoutHandle returns a copy of m with its platform-native handle cleared,
+// so derived UI caches never alias or retain native handles owned by Modes().
+func (m Mode) WithoutHandle() Mode {
+	var zero nativeMode
+	m.native = zero
+	return m
+}
+
 // RefreshRates returns the modes of the resolution of current, fastest first.
 func RefreshRates(modes []Mode, current Mode) []Mode {
 	var out []Mode

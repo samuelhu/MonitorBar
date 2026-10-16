@@ -67,17 +67,7 @@ func (a *app) ready(show bool) {
 	mygo.Power.OnResume(changed)
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		a.quitting = true
-		a.s.save()
-		display.RestoreGamma()
-		if a.s.ddc != nil {
-			a.s.ddc.Close()
-		}
-		for _, m := range a.s.modes {
-			m.Release()
-		}
-		if a.s.hasCurrent {
-			a.s.current.Release()
-		}
+		a.s.shutdown()
 		a.tray.Destroy()
 	})
 
