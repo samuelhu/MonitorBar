@@ -386,6 +386,30 @@ func IdleSeconds() float64 {
 // SleepNow turns the displays off until the next input.
 func SleepNow() error { return exec.Command("/usr/bin/pmset", "displaysleepnow").Start() }
 
+var (
+	outsideWatchOnce sync.Once
+	outsideMonitor   objc.ID
+)
+
+// WatchOutsideClicks calls fn whenever a mouse button is pressed outside the
+// application on macOS, allowing a non-activating, non-key flyout to dismiss
+// when clicking elsewhere without stealing key-window focus from the active app.
+func WatchOutsideClicks(fn func()) {
+	load()
+	outsideWatchOnce.Do(func() {
+		const mask = 1<<1 | 1<<3 | 1<<25 // NSEventMaskLeftMouseDown | RightMouseDown | OtherMouseDown
+		selAdd := objc.RegisterName("addGlobalMonitorForEventsMatchingMask:handler:")
+		selRetain := objc.RegisterName("retain")
+		blk := objc.NewBlock(func(_ objc.Block, _ objc.ID) {
+			fn()
+		})
+		mon := objc.ID(objc.GetClass("NSEvent")).Send(selAdd, uintptr(mask), uintptr(blk))
+		if mon != 0 {
+			outsideMonitor = mon.Send(selRetain)
+		}
+	})
+}
+
 func goCFString(ref uintptr) string {
 	if ref == 0 || cfGetTypeID(ref) != cfStringGetTypeID() {
 		return ""

@@ -117,10 +117,15 @@ func (a *app) open() {
 		Placement: mygo.PlacementBottom,
 		Width:     panelWidth,
 		Height:    h,
-		Focusable: true,
+		Focusable: runtime.GOOS != "darwin",
 		Shadow:    true,
 		Content:   ui.View(a.panel.view),
 	})
+	if runtime.GOOS == "darwin" {
+		display.WatchOutsideClicks(func() {
+			mygo.RunOnMain(a.close)
+		})
+	}
 	a.flyout.OnClose(func(e *mygo.CloseEvent) {
 		if !a.quitting {
 			e.PreventDefault()

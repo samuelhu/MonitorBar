@@ -58,3 +58,17 @@ func TestSetCoalesces(t *testing.T) {
 		t.Errorf("writes = %v, want one write of 80", f.writes)
 	}
 }
+
+func TestGainsMonotonicAndNoDeadZone(t *testing.T) {
+	prevR, _, _ := gains(0, 0)
+	if prevR <= 0.1 || prevR >= 0.5 {
+		t.Fatalf("0%% brightness gain = %v, want safe visible floor", prevR)
+	}
+	for pct := 1; pct <= 100; pct++ {
+		r, g, b := gains(float64(pct)/100, 0)
+		if !(r > prevR && r == g && g == b) {
+			t.Fatalf("gain at %d%% = (%v,%v,%v) not strictly greater than %d%% (%v)", pct, r, g, b, pct-1, prevR)
+		}
+		prevR = r
+	}
+}

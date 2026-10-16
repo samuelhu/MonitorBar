@@ -352,6 +352,9 @@ func RestoreGamma() {
 // ResetGammaBase does nothing on Windows: changes start from the identity.
 func ResetGammaBase() {}
 
+// WatchOutsideClicks does nothing on Windows: Focusable flyout handles it.
+func WatchOutsideClicks(fn func()) {}
+
 func (m Monitor) dc() uintptr {
 	driver, _ := syscall.UTF16PtrFromString("DISPLAY")
 	dc, _, _ := procCreateDC.Call(uintptr(unsafe.Pointer(driver)), uintptr(unsafe.Pointer(m.device())), 0, 0)
