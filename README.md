@@ -37,14 +37,6 @@ A simpler monitor control for the Mac menu bar — <a href="#english">English</a
 
 可选：面板右上角「⋯」→「登录时启动」，开机自动运行。
 
-## 命令行
-
-```bash
-MonitorBar --show                 # 打开面板
-MonitorBar --probe                # 打印显示器、接口、DDC/CI 读数和局域网发现结果
-MonitorBar --open-at-login on     # 开机自启（off 关闭）
-```
-
 ## 构建
 
 Go 1.27+，界面基于 [mygo](https://mygo.egoist.dev/)。
@@ -55,7 +47,7 @@ go tool mygo build -platform darwin/arm64       # 打包
 go test ./...                                   # 测试
 ```
 
-适配其他显示器：先跑 `--probe` 看识别结果；DDC/CI 编码在 `internal/display/ddc.go`（输入源名称 `InputName`，面板项在 `store.go` 的 `controlCatalog`）；其他局域网接口可参照 `internal/mitv` 写新通道。
+适配其他显示器：先运行 `go run . --probe` 看识别结果（已安装的 app 也可运行 `.app/Contents/MacOS/MonitorBar --probe`）；DDC/CI 编码在 `internal/display/ddc.go`（输入源名称 `InputName`，面板项在 `store.go` 的 `controlCatalog`）；其他局域网接口可参照 `internal/mitv` 写新通道。
 
 ## English
 
