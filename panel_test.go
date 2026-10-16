@@ -334,11 +334,12 @@ func TestSnapshotsEN(t *testing.T) {
 	}
 }
 
-// The input chip shows the one the user last picked: HyperOS has no
-// "current source" API, so the app remembers it.
-func TestInputHighlightRemembersLastPick(t *testing.T) {
+// Clicking a LAN input records LastInput and sends the switch command, while
+// clearing inputVerified so no fake active highlight is shown without DDC readback.
+func TestInputSelectionClearsUnverifiedHighlight(t *testing.T) {
 	p, _ := testPanel(t)
 	s := p.s
+	s.inputVerified = true // e.g. from an earlier DDC probe
 	if s.prefs.LastInput != 0 {
 		t.Fatalf("fresh store already has LastInput %d", s.prefs.LastInput)
 	}
@@ -349,6 +350,9 @@ func TestInputHighlightRemembersLastPick(t *testing.T) {
 	tt.Frame()
 	if s.input != 29 || s.prefs.LastInput != 29 {
 		t.Fatalf("after clicking DP: input %d LastInput %d, want 29", s.input, s.prefs.LastInput)
+	}
+	if s.inputVerified {
+		t.Fatalf("expected inputVerified to be cleared on LAN input click")
 	}
 }
 
@@ -431,12 +435,29 @@ func TestLANInputNotRestoredAsFakeActive(t *testing.T) {
 func TestHostPortDefaultAndManualDesignation(t *testing.T) {
 	p, _ := testPanel(t)
 	s := p.s
-	// By default on HDMI connection with HDMI1 and HDMI2, defaults to HDMI1 (ID 23)
-	if got := s.hostInput(); got != 23 {
-		t.Fatalf("expected default host input to be 23 (HDMI 1), got %d", got)
+	// testPanel has two HDMI ports (HDMI1=23, HDMI2=24) on an "HDMI" connection:
+	// without manual designation, hostInput() returns 0 rather than guessing HDMI1.
+	if got := s.hostInput(); got != 0 {
+		t.Fatalf("expected ambiguous dual-HDMI hostInput() to return 0 until designated, got %d", got)
+	}
+	if !strings.Contains(s.inputNote(), "HDMI") || strings.Contains(s.inputNote(), "HDMI 1") {
+		t.Fatalf("expected inputNote to show generic HDMI family without guessing HDMI 1, got %q", s.inputNote())
 	}
 
-	// Manually designating HDMI 2 (ID 24)
+	// "DisplayPort" connection matches single DP port (29) unambiguously
+	s.monitor.Connection = "DisplayPort"
+	if got := s.hostInput(); got != 29 {
+		t.Fatalf("expected DisplayPort connection to match DP (29), got %d", got)
+	}
+
+	// "USB-C" connection matches single USB-C port (30) unambiguously
+	s.monitor.Connection = "USB-C"
+	if got := s.hostInput(); got != 30 {
+		t.Fatalf("expected USB-C connection to match USB-C (30), got %d", got)
+	}
+
+	// Manually designating HDMI 2 (ID 24) on an HDMI connection resolves the ambiguity
+	s.monitor.Connection = "HDMI"
 	s.setHostInput(24)
 	if s.prefs.HostInput != 24 {
 		t.Fatalf("expected prefs.HostInput to be 24, got %d", s.prefs.HostInput)

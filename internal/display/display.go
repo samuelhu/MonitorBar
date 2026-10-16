@@ -7,7 +7,6 @@ package display
 import (
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 )
 
@@ -113,16 +112,14 @@ func dedupe(modes []Mode) []Mode {
 	})
 }
 
-// gains scales the color channels with perceptual gamma pre-compensation (gain = brightness^(1/2.2))
-// and a linear safe floor [0.12..1.0] so 0% never blacks out the display or creates a bottom dead zone:
-// positive warmth follows a smooth Planckian-inspired locus (cutting green gently and blue more);
-// negative warmth cuts red and green a little (cooler).
+// gains scales the color channels in gamma-encoded LUT space with a linear
+// safe floor [0.12..1.0] so 0% never blacks out the display or creates a
+// bottom dead zone: positive warmth follows a smooth Planckian-inspired locus
+// (cutting green gently and blue more); negative warmth cuts red and green a
+// little (cooler).
 func gains(brightness, warmth float64) (r, g, b float64) {
 	gain := max(0.0, min(brightness, 1.0))
 	gain = 0.12 + 0.88*gain
-	if gain > 0 && gain < 1 {
-		gain = math.Pow(gain, 1.0/2.2)
-	}
 	if warmth >= 0 {
 		w := min(warmth, 1.0)
 		green := 1 - (0.16*w + 0.06*w*w)

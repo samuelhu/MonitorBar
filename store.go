@@ -198,23 +198,46 @@ func (s *store) inputChannel() string {
 	return "DDC/CI"
 }
 
-// hostInput returns the source ID corresponding to this host's physical cable.
+// hostInput returns the source ID corresponding to this host's physical cable
+// when known unambiguously (manual designation, DDC-verified active input, or
+// a single port matching the OS-reported cable type).
 func (s *store) hostInput() int {
+	sources := s.sources()
 	if s.prefs != nil && s.prefs.HostInput != 0 {
-		return s.prefs.HostInput
+		for _, src := range sources {
+			if src.ID == s.prefs.HostInput {
+				return s.prefs.HostInput
+			}
+		}
 	}
-	conn := strings.ToUpper(s.monitor.Connection)
+	if s.inputVerified && s.input != 0 {
+		for _, src := range sources {
+			if src.ID == s.input {
+				return s.input
+			}
+		}
+	}
+	conn := strings.ToUpper(strings.TrimSpace(s.monitor.Connection))
 	if conn == "" {
-		conn = "HDMI" // Apple Silicon HDMI fallback
+		return 0
 	}
-	for _, src := range s.sources() {
-		upper := strings.ToUpper(src.Name)
-		if strings.Contains(conn, "HDMI") && strings.HasPrefix(upper, "HDMI") {
-			return src.ID
+	isHDMI := strings.Contains(conn, "HDMI")
+	isDP := strings.Contains(conn, "DISPLAYPORT") || conn == "DP" || strings.HasPrefix(conn, "DP ")
+	isUSBC := strings.Contains(conn, "USB-C") || strings.Contains(conn, "TYPE-C") || strings.Contains(conn, "THUNDERBOLT")
+	var matches []int
+	for _, src := range sources {
+		upper := strings.ToUpper(strings.TrimSpace(src.Name))
+		switch {
+		case isHDMI && strings.HasPrefix(upper, "HDMI"):
+			matches = append(matches, src.ID)
+		case isDP && (strings.HasPrefix(upper, "DP") || strings.HasPrefix(upper, "DISPLAYPORT")):
+			matches = append(matches, src.ID)
+		case isUSBC && (strings.HasPrefix(upper, "USB-C") || strings.HasPrefix(upper, "TYPE-C")):
+			matches = append(matches, src.ID)
 		}
-		if strings.Contains(conn, "DP") && strings.HasPrefix(upper, "DP") {
-			return src.ID
-		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
 	}
 	return 0
 }
@@ -300,6 +323,9 @@ func (s *store) connect() {
 				s.inputs, s.hasVolume = nil, s.ddcVolume // DDC/CI may still have volume
 				return
 			}
+			// LAN remote has no current-source telemetry; never carry a DDC
+			// inputVerified flag onto LAN source chips.
+			s.inputVerified = false
 			s.prefs.NetworkHost, s.dirty = link.Host, true
 			s.save()
 			slices.SortFunc(sources, func(a, b mitv.Source) int { return a.ID - b.ID })
@@ -322,11 +348,14 @@ func (s *store) selectInput(src mitv.Source) {
 		}
 		return
 	}
-	s.notice = tr("已向显示器发送切换指令：", "Switch command sent: ") + formatSourceName(src.Name)
+	// LAN switching is fire-and-forget; never show a fake verified highlight.
+	s.inputVerified = false
+	label := formatSourceName(src.Name)
+	s.notice = tr("已向显示器发送切换指令：", "Switch command sent: ") + label
 	go func() {
 		if err := link.Select(src.ID); err != nil {
 			s.post(func() {
-				s.notice = tr("切换到 ", "Switching to ") + src.Name + tr(" 失败：显示器没有响应", " failed: the display did not answer")
+				s.notice = tr("切换到 ", "Switching to ") + label + tr(" 失败：显示器没有响应", " failed: the display did not answer")
 			})
 		}
 	}()
@@ -401,9 +430,6 @@ func (s *store) readVolume() {
 	go func() {
 		v, err := link.Volume()
 		if err != nil {
-			if s.prefs != nil && s.prefs.path != "" {
-				s.post(func() { s.connect() })
-			}
 			return
 		}
 		s.post(func() {
