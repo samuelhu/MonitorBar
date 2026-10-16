@@ -5,3 +5,4 @@ mygo_windows_*.syso
 /MonitorBar
 *.exe
 .idea/
+/dist/
