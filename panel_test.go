@@ -10,8 +10,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/binaryify/MonitorBar/internal/display"
-	"github.com/binaryify/MonitorBar/internal/mitv"
+	"monitorbar/internal/display"
+	"monitorbar/internal/mitv"
 )
 
 // testPanel is the panel over a store of fixed data, connected to the

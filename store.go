@@ -13,8 +13,8 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"github.com/binaryify/MonitorBar/internal/display"
-	"github.com/binaryify/MonitorBar/internal/mitv"
+	"monitorbar/internal/display"
+	"monitorbar/internal/mitv"
 )
 
 // scene is a convenience starting point for brightness and warmth.

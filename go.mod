@@ -1,4 +1,4 @@
-module github.com/binaryify/MonitorBar
+module monitorbar
 
 go 1.27.2
 

@@ -1,8 +1,8 @@
 {
   "name": "MonitorBar",
-  "identifier": "io.github.binaryify.MonitorBar",
+  "identifier": "com.samuelhu.MonitorBar",
   "version": "1.0.0",
-  "copyright": "Copyright © 2026 binaryify",
+  "copyright": "Copyright © 2026 binaryify & samuelhu",
   "out": "build",
   "macos": {
     "infoPlist": {

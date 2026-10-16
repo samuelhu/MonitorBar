@@ -6,7 +6,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"github.com/binaryify/MonitorBar/internal/display"
+	"monitorbar/internal/display"
 )
 
 const arrowHeight = 10

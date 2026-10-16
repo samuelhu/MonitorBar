@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/binaryify/MonitorBar/internal/display"
-	"github.com/binaryify/MonitorBar/internal/mitv"
+	"monitorbar/internal/display"
+	"monitorbar/internal/mitv"
 )
 
 // probe prints what the app can see and control, without UI (--probe).
