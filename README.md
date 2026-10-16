@@ -28,6 +28,18 @@ A simpler monitor control for the Mac menu bar — <a href="#english">English</a
 
 单个 .app（约 12 MB），无守护进程、无遥测、不收集数据。目前只发布 Apple 芯片版。
 
+## 场景
+
+三个场景是舒适起点，不是校准档。**亮度百分比以显示器自身亮度 100% 为基准设计**：用软件调光的显示器（如 REDMI）请把 OSD 亮度保持在 100%，亮度交给面板调节，百分比才与场景设计一致；支持 DDC/CI 的显示器由应用直接控制背光，无需手动设置。
+
+| 场景 | 亮度 | 冷暖 | 白点（设计值） | 适合 |
+| --- | --- | --- | --- | --- |
+| 编程 Coding | 65% | 10% | ≈ 5800K | 长时间写代码：稍暖、略降亮度 |
+| 阅读 Reading | 50% | 25% | ≈ 4900K | 文字阅读：更暖、更暗 |
+| 影音 Movie | 保持当前 | 归零 | D65（6500K） | 影音娱乐：中性白，不动亮度 |
+
+实现上，冷暖通过显卡 Gamma 表的 RGB 增益完成：红通道不变，绿随冷暖小幅下降，蓝降幅最大；上表白点为设计目标（按 mired 换算），非实测校准值。亮度百分比同样不对应固定 cd/m²——它们描述的是相对明暗，不是绝对亮度。
+
 ## 安装
 
 1. 到 [Releases](../../releases) 下载最新的 `MonitorBar-*-macos-arm64.dmg`（需要 Apple 芯片 Mac）。
@@ -54,6 +66,8 @@ go test ./...                                   # 测试
 MonitorBar puts monitor control in the Mac menu bar — input switching (HDMI / DP / USB-C), volume, brightness and warmth, refresh rate — on one panel. It drives HyperOS monitors over their LAN remote API (they lack DDC/CI), uses DDC/CI where available, and does software dimming through the GPU gamma table on any display.
 
 A much simpler rewrite of [Binaryify/MonitorBar](https://github.com/Binaryify/MonitorBar): no tabs, no screen-time tracking, no auto-update, no scheduling.
+
+**Scenes** are comfort starting points designed against the display's own brightness at **100%** — with software dimming (e.g. REDMI monitors), leave the OSD brightness at 100% and dim from the panel; with DDC/CI the app drives the backlight directly. Coding: 65% · warmth ≈ 5800K. Reading: 50% · ≈ 4900K. Movie: keeps your brightness, neutral D65 white. Warmth is applied as RGB gains in the gamma table — the Kelvin figures are design targets, not measured colorimetry.
 
 **Install:** download the dmg from [Releases](../../releases) (Apple Silicon), drag MonitorBar to Applications. The app is unsigned and not notarized, so macOS blocks the first launch — that's expected. Double-click once, then open **System Settings → Privacy & Security** and click **Open Anyway** at the bottom (on macOS 14 and earlier, right-click → Open instead). Allow local-network access when prompted, and optionally enable launch-at-login from the panel's ⋯ menu.
 
