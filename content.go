@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -176,11 +177,11 @@ func (p *panel) refreshRates(c *ui.Context) {
 	}
 	displayRates := s.cachedShowRates
 	if len(displayRates) > 1 {
-		groupLabel(c, tr("刷新率", "Refresh rate"), fmt.Sprintf("%d Hz", rate))
+		groupLabel(c, tr("刷新率", "Refresh rate"), strconv.Itoa(rate)+" Hz")
 		card(c, func() {
 			chips := func() {
 				for _, m := range displayRates {
-					if chipText(c.Key(m.ID()), fmt.Sprintf("%d Hz", m.RefreshRate), m.RefreshRate == rate) {
+					if chipText(c.Key(m.ID()), strconv.Itoa(m.RefreshRate)+" Hz", m.RefreshRate == rate) {
 						s.applyMode(m)
 					}
 				}

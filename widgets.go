@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"math"
+	"strconv"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -51,11 +51,11 @@ func chip(c *ui.Context, selected bool) ui.Element {
 	case selected:
 		e.Background(accent.Alpha(0.18)).Border(0.8, accent.Alpha(0.55)).TextColor(accent)
 	case e.Pressed():
-		e.Background(ui.RGBA(255, 255, 255, 0.13)).TextColor(ink)
+		e.Background(ui.RGBA(255, 255, 255, 0.14)).Border(0.7, ui.RGBA(255, 255, 255, 0.14)).TextColor(ink)
 	case e.Hovered():
-		e.Background(ui.RGBA(255, 255, 255, 0.1)).TextColor(ink)
+		e.Background(ui.RGBA(255, 255, 255, 0.1)).Border(0.7, ui.RGBA(255, 255, 255, 0.11)).TextColor(ink)
 	default:
-		e.Background(ui.RGBA(255, 255, 255, 0.06)).TextColor(ink)
+		e.Background(ui.RGBA(255, 255, 255, 0.06)).Border(0.7, ui.RGBA(255, 255, 255, 0.05)).TextColor(ink)
 	}
 	return e
 }
@@ -117,7 +117,7 @@ func (s sliderRow) show(c *ui.Context) bool {
 				})
 			}
 			ui.Text(c, s.title).FontSize(13).FontWeight(590).LetterSpacing(-0.1).Grow(1)
-			text := fmt.Sprint(int(math.Round(*s.value)))
+			text := strconv.Itoa(int(math.Round(*s.value)))
 			if s.format != nil {
 				text = s.format(*s.value)
 			}
@@ -125,10 +125,12 @@ func (s sliderRow) show(c *ui.Context) bool {
 			if s.isMuted {
 				numColor = muted
 			}
-			ui.Text(c, text).FontSize(18).FontWeight(600).LetterSpacing(-0.2).FontFeatures("tnum").TextColor(numColor)
-			if s.unit != "" {
-				ui.Text(c, s.unit).FontSize(11).FontWeight(500).TextColor(muted)
-			}
+			ui.Row(c).Gap(2.5).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, text).FontSize(18).FontWeight(600).LetterSpacing(-0.2).FontFeatures("tnum").TextColor(numColor)
+				if s.unit != "" {
+					ui.Text(c, s.unit).FontSize(11).FontWeight(500).TextColor(muted)
+				}
+			})
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			if stepButton(c, "minus") {

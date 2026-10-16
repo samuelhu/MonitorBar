@@ -37,9 +37,14 @@ func (p *panel) view(c *ui.Context) {
 		c.Root().Background(ui.Transparent) // the arrow and the rounded corners show the desktop
 	}
 	shell := ui.Column(c).Width(panelWidth).TextColor(ink)
+	if runtime.GOOS == "darwin" {
+		shell.DrawOver(func(pt *ui.Painter, r ui.Rect) {
+			p.drawArrow(pt, r)
+		})
+	}
 	shell.Children(func() {
 		if runtime.GOOS == "darwin" {
-			p.arrow(c)
+			ui.Box(c).Height(arrowHeight)
 		}
 		body := ui.Column(c).PaddingX(13).Gradient(panelTop, panelBottom, 135)
 		if runtime.GOOS == "darwin" { // Windows 11 rounds and outlines the flyout itself
@@ -70,23 +75,31 @@ func (p *panel) view(c *ui.Context) {
 	}
 }
 
-func (p *panel) arrow(c *ui.Context) {
-	x := min(max(p.arrowX, 18), panelWidth-18)
-	ui.Box(c).Height(arrowHeight).Draw(func(pt *ui.Painter, r ui.Rect) {
-		var path ui.Path
-		left, tip, right := r.X+x-11, r.X+x, r.X+x+11
-		path.MoveTo(left, r.Y+r.H)
-		path.QuadTo(tip-3, r.Y+r.H-2, tip, r.Y)
-		path.QuadTo(tip+3, r.Y+r.H-2, right, r.Y+r.H)
-		path.Close()
-		pt.FillPath(&path, panelTop)
-	})
+func (p *panel) drawArrow(pt *ui.Painter, r ui.Rect) {
+	x := min(max(p.arrowX, 22), panelWidth-22)
+	left, tip, right := r.X+x-11, r.X+x, r.X+x+11
+	base := r.Y + arrowHeight
+
+	// Fill extends 1.2px into the body to seamlessly cover its top border under the arrow.
+	var fill ui.Path
+	fill.MoveTo(left, base+1.2)
+	fill.QuadTo(tip-3, base-2, tip, r.Y+0.5)
+	fill.QuadTo(tip+3, base-2, right, base+1.2)
+	fill.Close()
+	pt.FillPath(&fill, panelTop)
+
+	// Stroke only the two sloped sides so the body's 0.7px border continues smoothly over the tip.
+	var edge ui.Path
+	edge.MoveTo(left, base+0.35)
+	edge.QuadTo(tip-3, base-2, tip, r.Y+0.5)
+	edge.QuadTo(tip+3, base-2, right, base+0.35)
+	pt.StrokePath(&edge, 0.7, ui.RGBA(255, 255, 255, 0.12))
 }
 
 func (p *panel) header(c *ui.Context) {
 	s := p.s
 	ui.Row(c).Gap(10).Padding(16, 0, 14, 0).AlignItems(ui.Center).Children(func() {
-		ui.Box(c).Size(32, 32).Radius(9).Center().Gradient(accent, accentDeep, 180).Children(func() {
+		ui.Box(c).Size(32, 32).Radius(9).Center().Gradient(accent, accentDeep, 180).Border(0.7, ui.RGBA(255, 255, 255, 0.22)).Children(func() {
 			icon(c, "display").FontSize(15).TextColor(ui.RGB(255, 255, 255))
 		})
 		ui.Column(c).Gap(2).Grow(1).Children(func() {
@@ -94,9 +107,11 @@ func (p *panel) header(c *ui.Context) {
 			ui.Text(c, p.caption()).FontSize(12).FontWeight(400).TextColor(muted).SingleLine()
 		})
 		more := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Label(tr("更多", "More")).Tooltip(tr("更多", "More"))
-		more.Background(ui.RGBA(255, 255, 255, 0.07)).TextColor(muted)
-		if more.Hovered() {
-			more.Background(ui.RGBA(255, 255, 255, 0.12)).TextColor(ink)
+		more.Background(ui.RGBA(255, 255, 255, 0.06)).Border(0.7, cardStroke).TextColor(muted)
+		if more.Pressed() {
+			more.Background(ui.RGBA(255, 255, 255, 0.16)).TextColor(ink)
+		} else if more.Hovered() {
+			more.Background(ui.RGBA(255, 255, 255, 0.11)).TextColor(ink)
 		}
 		more.Children(func() {
 			icon(c, "ellipsis").FontSize(15)
@@ -117,9 +132,11 @@ func (p *panel) header(c *ui.Context) {
 			}
 		})
 		power := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Tooltip(tr("立即熄屏", "Sleep display")).Label(tr("立即熄屏", "Sleep display"))
-		power.Background(ui.RGBA(255, 255, 255, 0.07)).TextColor(muted)
-		if power.Hovered() {
-			power.Background(ui.RGBA(255, 255, 255, 0.12)).TextColor(ink)
+		power.Background(ui.RGBA(255, 255, 255, 0.06)).Border(0.7, cardStroke).TextColor(muted)
+		if power.Pressed() {
+			power.Background(ui.RGBA(255, 255, 255, 0.16)).TextColor(ink)
+		} else if power.Hovered() {
+			power.Background(ui.RGBA(255, 255, 255, 0.11)).TextColor(ink)
 		}
 		power.Children(func() { icon(c, "power").FontSize(14) })
 		if power.Clicked() {
@@ -145,7 +162,16 @@ func (p *panel) content(c *ui.Context) {
 		inner.Children(func() {
 			p.overview(c)
 			if s.notice != "" {
-				ui.Text(c, s.notice).FontSize(11).TextColor(muted)
+				banner := ui.Row(c).Gap(7).Padding(8, 10).Radius(9).AlignItems(ui.Center).
+					Background(ui.RGBA(255, 255, 255, 0.055)).Border(0.7, cardStroke).
+					Cursor(ui.CursorPointer)
+				banner.Children(func() {
+					ui.Box(c).Size(5, 5).Radius(2.5).Background(accent)
+					ui.Text(c, s.notice).FontSize(11).TextColor(ink).Grow(1)
+				})
+				if banner.Clicked() {
+					s.notice = ""
+				}
 			}
 		})
 		if h := inner.Bounds().H; h > 0 && h != p.contentHeight {

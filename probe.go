@@ -13,15 +13,21 @@ func probe() {
 	useSystemLanguage(systemLocale())
 	m := display.Target()
 	fmt.Printf(tr("显示器: %s  接口: %s\n", "Display: %s  Connection: %s\n"), m.Name, or(m.Connection, tr("未知", "unknown")))
-	if mode, ok := m.CurrentMode(); ok {
+	current, ok := m.CurrentMode()
+	if ok {
+		defer current.Release()
 		hidpi := ""
-		if mode.HiDPI() {
+		if current.HiDPI() {
 			hidpi = " HiDPI"
 		}
-		fmt.Printf(tr("当前模式: %s%s %dHz\n", "Current mode: %s%s %dHz\n"), mode.Title(), hidpi, mode.RefreshRate)
+		fmt.Printf(tr("当前模式: %s%s %dHz\n", "Current mode: %s%s %dHz\n"), current.Title(), hidpi, current.RefreshRate)
 	}
 	modes := m.Modes()
-	current, _ := m.CurrentMode()
+	defer func() {
+		for _, mode := range modes {
+			mode.Release()
+		}
+	}()
 	w, h := m.NativeSize(modes, current)
 	fmt.Printf(tr("原生分辨率: %d × %d（%s）\n", "Native resolution: %d × %d (%s)\n"), w, h, display.SizeLabel(w, h))
 	fmt.Printf(tr("可用模式: %d 个  亮屏: %v  空闲: %.0f 秒\n", "Modes: %d  Awake: %v  Idle: %.0fs\n"), len(modes), !m.Asleep(), display.IdleSeconds())

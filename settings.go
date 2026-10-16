@@ -49,6 +49,9 @@ func (s *settings) normalize() {
 }
 
 func (s *settings) save() error {
+	if s.path == "" {
+		return nil
+	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/egoist/mygo"
 
@@ -167,9 +168,6 @@ func (s *store) applyGamma() {
 	brightness := s.prefs.SoftBrightness / 100
 	if s.hasBrightness {
 		brightness = 1 // DDC/CI owns brightness; gamma only adjusts warmth.
-	} else {
-		// Keep a safe floor so the display never blacks out completely at 0%
-		brightness = max(0.12, brightness)
 	}
 	err := s.setGamma(brightness, s.prefs.Warmth/100)
 	switch {
@@ -335,6 +333,7 @@ func (s *store) selectInput(src mitv.Source) {
 }
 
 func (s *store) setVolume(percent float64) {
+	percent = max(0, min(percent, 100))
 	if percent > 0 {
 		s.muted = false
 	}
@@ -402,6 +401,9 @@ func (s *store) readVolume() {
 	go func() {
 		v, err := link.Volume()
 		if err != nil {
+			if s.prefs != nil && s.prefs.path != "" {
+				s.post(func() { s.connect() })
+			}
 			return
 		}
 		s.post(func() {
@@ -712,6 +714,16 @@ func (s *store) displaysChanged() {
 	s.applyGamma()
 	if s.monitor != previous {
 		s.probeDDC()
+	}
+	// On macOS, ColorSync may reload the display ICC profile ~300-600ms after
+	// wake or display reconfiguration, overwriting early gamma writes.
+	if s.prefs != nil && s.prefs.path != "" {
+		time.AfterFunc(600*time.Millisecond, func() {
+			s.post(func() {
+				display.ResetGammaBase()
+				s.applyGamma()
+			})
+		})
 	}
 }
 

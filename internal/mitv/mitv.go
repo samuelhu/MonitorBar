@@ -30,6 +30,17 @@ type Source struct {
 	Name string
 }
 
+// sharedClient pools persistent TCP connections across LAN calls and discovery probes.
+var sharedClient = &http.Client{
+	Timeout: 4 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        16,
+		MaxIdleConnsPerHost: 8,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  true,
+	},
+}
+
 // Link is a client for one device.
 type Link struct {
 	Host   string
@@ -41,7 +52,7 @@ func New(host string) *Link {
 	if strings.ContainsAny(host, " /?#@\r\n\t") {
 		host = ""
 	}
-	return &Link{Host: host, client: &http.Client{Timeout: 4 * time.Second}}
+	return &Link{Host: host, client: sharedClient}
 }
 
 // DeviceName answers whether the device is reachable, with its name.
@@ -81,7 +92,7 @@ func (l *Link) Select(sourceID int) error {
 	return l.call("controller", url.Values{"action": {"changesource2"}, "sourceid": {strconv.Itoa(sourceID)}}, nil)
 }
 
-// Volume reads the volume on a 0...100 scale.
+// Volume reads the volume on a 0...100 scale, rounded to the nearest integer.
 func (l *Link) Volume() (int, error) {
 	var data struct {
 		Volume    int `json:"volume"`
@@ -90,7 +101,8 @@ func (l *Link) Volume() (int, error) {
 	if err := l.call("controller", url.Values{"action": {"getvolume"}}, &data); err != nil {
 		return 0, err
 	}
-	return data.Volume * 100 / max(data.MaxVolume, 1), nil
+	maxVol := max(data.MaxVolume, 1)
+	return (data.Volume*100 + maxVol/2) / maxVol, nil
 }
 
 // Press sends a remote key such as "volumeup", "volumedown", "home" or "back".
