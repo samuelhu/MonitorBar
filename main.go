@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"slices"
 
 	"github.com/egoist/mygo"
@@ -21,6 +22,13 @@ func main() {
 	if slices.Contains(os.Args[1:], "--probe") {
 		probe()
 		return
+	}
+	// Render the compact menu bar flyout via CPU-backed CALayer on macOS so
+	// opening/closing the popover never creates or tears down a CAMetalLayer
+	// swapchain (which can cause WindowServer/DCP to flicker high-refresh
+	// HDMI/VRR displays or momentarily bypass custom gamma LUTs).
+	if runtime.GOOS == "darwin" && os.Getenv("MYGO_GPU") == "" {
+		_ = os.Setenv("MYGO_GPU", "0")
 	}
 	mygo.App.SetName("MonitorBar")
 	if i := slices.Index(os.Args, "--open-at-login"); i > 0 && i+1 < len(os.Args) {

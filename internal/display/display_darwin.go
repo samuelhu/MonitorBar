@@ -275,8 +275,10 @@ func (m Monitor) Apply(mode Mode) error {
 
 var (
 	gammaMu        sync.Mutex
+	gammaMonitor   uint32       // display handle gammaBase was captured from
 	gammaBase      [3][]float32 // the ColorSync curve, captured before the first change
 	gammaBuf       [3][]float32 // reusable buffer to avoid allocations during slider dragging
+	gammaApplied   bool         // true while a custom gamma table is active
 	lastBrightness = -1.0
 	lastWarmth     = -999.0
 )
@@ -292,13 +294,16 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 	gammaMu.Lock()
 	defer gammaMu.Unlock()
 
-	// Skip redundant system calls if setting hasn't changed.
-	if gammaBase[0] != nil && brightness == lastBrightness && warmth == lastWarmth {
+	// Skip redundant system calls if setting hasn't changed on the same monitor.
+	if gammaBase[0] != nil && gammaMonitor == m.handle && brightness == lastBrightness && warmth == lastWarmth {
 		return nil
 	}
 
-	if gammaBase[0] == nil {
-		cgDisplayRestoreColorSyncSettings()
+	if gammaBase[0] == nil || gammaMonitor != m.handle {
+		if gammaApplied {
+			cgDisplayRestoreColorSyncSettings()
+			gammaApplied = false
+		}
 		capacity := cgDisplayGammaTableCapacity(m.handle)
 		if capacity == 0 {
 			return errors.New("display: gamma table unsupported")
@@ -310,6 +315,7 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 			return errors.New("display: empty gamma table")
 		}
 		gammaBase = [3][]float32{r[:n], g[:n], b[:n]}
+		gammaMonitor = m.handle
 	}
 	if len(gammaBase[0]) == 0 {
 		return errors.New("display: no gamma table")
@@ -338,6 +344,7 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 	if cgSetDisplayTransferByTable(m.handle, uint32(n), &gammaBuf[0][0], &gammaBuf[1][0], &gammaBuf[2][0]) != 0 {
 		return errors.New("display: the gamma table was refused")
 	}
+	gammaApplied = true
 	lastBrightness = brightness
 	lastWarmth = warmth
 	return nil
@@ -347,16 +354,19 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 func RestoreGamma() {
 	load()
 	gammaMu.Lock()
+	wasApplied := gammaApplied
+	gammaApplied = false
 	lastBrightness, lastWarmth = 1.0, 0.0
 	gammaMu.Unlock()
-	cgDisplayRestoreColorSyncSettings()
+	if wasApplied {
+		cgDisplayRestoreColorSyncSettings()
+	}
 }
 
-// ResetGammaBase forgets the captured curve, after the displays changed.
+// ResetGammaBase forces the next SetGamma call to push the transfer table to
+// hardware again without flashing to 100% via cgDisplayRestoreColorSyncSettings.
 func ResetGammaBase() {
 	gammaMu.Lock()
-	gammaBase = [3][]float32{}
-	gammaBuf = [3][]float32{}
 	lastBrightness = -1.0
 	lastWarmth = -999.0
 	gammaMu.Unlock()

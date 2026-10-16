@@ -17,10 +17,11 @@ const chrome = 230
 
 // app is the menu bar (notification area) icon and the panel it opens.
 type app struct {
-	s      *store
-	panel  *panel
-	tray   *mygo.Tray
-	flyout *mygo.Window // the open panel, or nil
+	s        *store
+	panel    *panel
+	tray     *mygo.Tray
+	flyout   *mygo.Window // the panel window, created on first open and hidden on close
+	quitting bool
 }
 
 func (a *app) ready(show bool) {
@@ -65,6 +66,7 @@ func (a *app) ready(show bool) {
 	mygo.Screen.OnDisplaysChanged(changed)
 	mygo.Power.OnResume(changed)
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		a.quitting = true
 		a.s.save()
 		display.RestoreGamma()
 		if a.s.ddc != nil {
@@ -88,7 +90,7 @@ func (a *app) ready(show bool) {
 }
 
 func (a *app) toggle() {
-	if a.flyout != nil {
+	if a.flyout != nil && a.flyout.IsVisible() {
 		a.close()
 	} else {
 		a.open()
@@ -96,21 +98,34 @@ func (a *app) toggle() {
 }
 
 func (a *app) open() {
-	if a.flyout != nil {
+	if a.flyout != nil && a.flyout.IsVisible() {
 		return
 	}
 	a.s.panelOpened()
 	icon := a.tray.Bounds()
 	area := mygo.Screen.DisplayNearestPoint(mygo.Point{X: icon.X + icon.Width/2, Y: icon.Y + icon.Height/2}).WorkArea
 	a.panel.maxContent = float32(max(area.Height-chrome, 200))
+	h := min(a.panel.height, area.Height)
+	if a.flyout != nil {
+		a.flyout.SetSize(panelWidth, h)
+		a.pointArrow()
+		a.flyout.Show()
+		return
+	}
 	a.flyout = mygo.NewFlyout(mygo.FlyoutOptions{
 		Tray:      a.tray,
 		Placement: mygo.PlacementBottom,
 		Width:     panelWidth,
-		Height:    min(a.panel.height, area.Height),
+		Height:    h,
 		Focusable: true,
 		Shadow:    true,
 		Content:   ui.View(a.panel.view),
+	})
+	a.flyout.OnClose(func(e *mygo.CloseEvent) {
+		if !a.quitting {
+			e.PreventDefault()
+			a.close()
+		}
 	})
 	a.flyout.OnClosed(func() {
 		a.flyout = nil
@@ -120,8 +135,9 @@ func (a *app) open() {
 }
 
 func (a *app) close() {
-	if a.flyout != nil {
-		a.flyout.Close()
+	if a.flyout != nil && a.flyout.IsVisible() {
+		a.flyout.Hide()
+		a.s.save()
 	}
 }
 
