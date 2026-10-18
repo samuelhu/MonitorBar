@@ -14,7 +14,9 @@ type panel struct {
 	s *store
 	// arrowX is where the arrow points, from the panel's left edge (macOS).
 	arrowX float32
-	// maxContent caps the scrolling area, so the panel fits the screen.
+	// maxHeight is the work area the panel must fit; maxContent is derived
+	// from it and the measured chrome on every frame.
+	maxHeight  int
 	maxContent float32
 	// onHeight hears the panel's natural height once it changes.
 	onHeight func(h int)
@@ -28,6 +30,7 @@ type panel struct {
 }
 
 func (p *panel) view(c *ui.Context) {
+	p.updateMaxContent()
 	c.SetTheme(darkTheme)
 	c.Root().Background(ui.Transparent) // the arrow and the rounded corners show the desktop
 	shell := ui.Column(c).Width(panelWidth).TextColor(ink)
@@ -217,4 +220,13 @@ func (p *panel) chromeHeight() float32 {
 		return chromeFallback
 	}
 	return arrowHeight + p.headerHeight + p.footerHeight + 16
+}
+
+// updateMaxContent derives the scroll cap from the work area and the last
+// measured chrome, so a growing footer (or a notice) cannot exceed the screen.
+func (p *panel) updateMaxContent() {
+	if p.maxHeight <= 0 {
+		return
+	}
+	p.maxContent = max(float32(p.maxHeight)-p.chromeHeight(), 200)
 }

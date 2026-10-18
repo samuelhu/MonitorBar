@@ -52,7 +52,7 @@ func (a *app) ready(show bool) {
 		a.s.displaysChanged()
 		a.s.redraw()
 	}
-	// Launching the app again (Start menu, Finder) opens its panel.
+	// Launching the app again (Finder, Dock, or Spotlight) opens its panel.
 	mygo.App.OnSecondInstance(func([]string, string) { a.open() })
 	mygo.Screen.OnDisplaysChanged(changed)
 	mygo.Power.OnResume(changed)
@@ -85,7 +85,8 @@ func (a *app) open() {
 	a.s.panelOpened()
 	icon := a.tray.Bounds()
 	area := mygo.Screen.DisplayNearestPoint(mygo.Point{X: icon.X + icon.Width/2, Y: icon.Y + icon.Height/2}).WorkArea
-	a.panel.maxContent = max(float32(area.Height)-a.panel.chromeHeight(), 200)
+	a.panel.maxHeight = area.Height
+	a.panel.updateMaxContent()
 	h := min(a.panel.height, area.Height)
 	if a.flyout != nil {
 		a.flyout.SetSize(panelWidth, h)
@@ -129,6 +130,9 @@ func (a *app) close() {
 func (a *app) resize(height int) {
 	if a.flyout == nil {
 		return
+	}
+	if a.panel.maxHeight > 0 && height > a.panel.maxHeight {
+		height = a.panel.maxHeight
 	}
 	a.flyout.SetSize(panelWidth, height)
 	a.pointArrow()

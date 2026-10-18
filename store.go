@@ -364,13 +364,15 @@ func (s *store) connectWithScan(forceDiscover bool) {
 			maxVol    int
 			volumeErr error
 		}
-		probeLink := func(host string) lanProbe {
+		probeLink := func(host string, reachable bool) lanProbe {
 			if host == "" {
 				return lanProbe{volumeErr: errors.New("mitv: no host")}
 			}
 			candidate := mitv.New(host)
-			if _, err := candidate.DeviceNameTimeout(2 * time.Second); err != nil {
-				return lanProbe{volumeErr: err}
+			if !reachable {
+				if _, err := candidate.DeviceNameTimeout(2 * time.Second); err != nil {
+					return lanProbe{volumeErr: err}
+				}
 			}
 			sources, err := candidate.Sources()
 			if err != nil || len(sources) == 0 {
@@ -382,13 +384,15 @@ func (s *store) connectWithScan(forceDiscover bool) {
 
 		result := lanProbe{}
 		if cached != "" {
-			result = probeLink(cached)
+			result = probeLink(cached, false)
 		}
 		didDiscover := false
 		if result.link == nil && canDiscover {
 			didDiscover = true
 			if host, err := mitv.Discover(); err == nil {
-				result = probeLink(host)
+				// Discover already validated reachability; skip a second
+				// DeviceName round-trip and just list sources.
+				result = probeLink(host, true)
 			}
 		}
 		s.post(func() {

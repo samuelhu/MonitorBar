@@ -637,3 +637,24 @@ func TestChromeHeightUsesMeasuredParts(t *testing.T) {
 		t.Fatalf("chrome height %v did not include the panel parts", got)
 	}
 }
+
+// The scroll cap follows the measured chrome, so a growing footer cannot
+// push the panel past the work area it was opened against.
+func TestMaxContentFollowsMeasuredChrome(t *testing.T) {
+	p, _ := testPanel(t)
+	p.maxHeight = 600
+	p.headerHeight, p.footerHeight = 60, 12
+	p.updateMaxContent()
+	before := p.maxContent
+	if want := float32(600) - p.chromeHeight(); before != want {
+		t.Fatalf("maxContent %v, want %v", before, want)
+	}
+	p.footerHeight = 38
+	p.updateMaxContent()
+	if p.maxContent >= before {
+		t.Fatalf("maxContent did not shrink when footer grew: %v -> %v", before, p.maxContent)
+	}
+	if total := p.maxContent + p.chromeHeight(); total > 600 {
+		t.Fatalf("panel would exceed the work area: %v > 600", total)
+	}
+}
