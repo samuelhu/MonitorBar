@@ -133,7 +133,7 @@ func (s sliderRow) show(c *ui.Context) bool {
 			})
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			if stepButton(c, "minus") {
+			if stepButton(c, "minus", tr("减小", "Decrease ")+s.title) {
 				v := math.Round(*s.value - s.step)
 				if s.magneticZero && math.Abs(v) < s.step/2 {
 					v = 0
@@ -148,7 +148,7 @@ func (s sliderRow) show(c *ui.Context) bool {
 				}
 				changed = true
 			}
-			if stepButton(c, "plus") {
+			if stepButton(c, "plus", tr("增大", "Increase ")+s.title) {
 				v := math.Round(*s.value + s.step)
 				if s.magneticZero && math.Abs(v) < s.step/2 {
 					v = 0
@@ -160,8 +160,8 @@ func (s sliderRow) show(c *ui.Context) bool {
 	return changed
 }
 
-func stepButton(c *ui.Context, name string) bool {
-	e := chip(c, false).Size(28, 24)
+func stepButton(c *ui.Context, name, label string) bool {
+	e := chip(c, false).Size(28, 24).Label(label)
 	icColor := muted
 	if e.Hovered() || e.Pressed() {
 		icColor = ink

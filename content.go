@@ -28,7 +28,7 @@ func (p *panel) scenes(c *ui.Context) {
 	ui.Row(c).Gap(6).Children(func() {
 		for _, sc := range scenes {
 			active := s.isActive(sc)
-			e := chip(c.Key(sc.name), active).Grow(1).Height(50).Gap(3)
+			e := chip(c.Key(sc.name), active).Grow(1).Height(50).Gap(3).Tooltip(sceneTooltip(sc))
 			e.Children(func() {
 				icColor := muted
 				if active {
@@ -42,6 +42,13 @@ func (p *panel) scenes(c *ui.Context) {
 			}
 		}
 	})
+}
+
+func sceneTooltip(sc scene) string {
+	if sc.keepBrightness {
+		return fmt.Sprintf(tr("保持当前亮度 · 冷暖 %d%%", "Keep brightness · Warmth %d%%"), int(sc.warmth))
+	}
+	return fmt.Sprintf(tr("亮度 %d%% · 冷暖 %d%%", "Brightness %d%% · Warmth %d%%"), int(sc.brightness), int(sc.warmth))
 }
 
 // picture groups the two software/hardware picture sliders.
@@ -110,9 +117,9 @@ func muteNote(s *store) string {
 func (p *panel) routing(c *ui.Context) {
 	s := p.s
 	if sources := s.sources(); len(sources) > 0 {
-		groupLabel(c, tr("输入源", "Input"), s.inputNote())
+		hostID := s.hostInput()
+		groupLabel(c, tr("输入源", "Input"), s.inputNoteFor(hostID))
 		card(c, func() {
-			hostID := s.hostInput()
 			chips := func() {
 				for _, src := range sources {
 					label := formatSourceName(src.Name)

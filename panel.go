@@ -145,7 +145,7 @@ func (p *panel) header(c *ui.Context) {
 	})
 }
 
-// caption sums the monitor up: "外接显示器 · HDMI · 4K · 160Hz".
+// caption sums the monitor up: "HDMI · 1920 × 1080 @ 160Hz".
 func (p *panel) caption() string {
 	if p.s.captionStr != "" {
 		return p.s.captionStr
@@ -170,7 +170,7 @@ func (p *panel) content(c *ui.Context) {
 					ui.Text(c, s.notice).FontSize(11).TextColor(ink).Grow(1)
 				})
 				if banner.Clicked() {
-					s.notice = ""
+					s.setNotice("")
 				}
 			}
 		})

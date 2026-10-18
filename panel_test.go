@@ -20,13 +20,17 @@ func testPanel(t *testing.T) (*panel, *[2]float64) {
 	t.Helper()
 	var gamma [2]float64
 	s := &store{
-		prefs:    &settings{SoftBrightness: 100},
-		redraw:   func() {},
-		setGamma: func(b, w float64) error { gamma = [2]float64{b, w}; return nil },
-		monitor:  display.Monitor{Name: "Mi Monitor", Connection: "HDMI"},
-		link:     mitv.New("192.0.2.1"),
-		inputs:   []mitv.Source{{ID: 23, Name: "HDMI1"}, {ID: 24, Name: "HDMI2"}, {ID: 29, Name: "DP"}, {ID: 30, Name: "USB-C"}},
-		volume:   80, hasVolume: true, deviceVolume: 80,
+		prefs:               &settings{SoftBrightness: 100},
+		redraw:              func() {},
+		setGamma:            func(b, w float64) error { gamma = [2]float64{b, w}; return nil },
+		restoreGamma:        func() {},
+		savedSoftBrightness: 100,
+		savedWarmth:         0,
+		savedInit:           true,
+		monitor:             display.Monitor{Name: "Mi Monitor", Connection: "HDMI"},
+		link:                mitv.New("192.0.2.1"),
+		inputs:              []mitv.Source{{ID: 23, Name: "HDMI1"}, {ID: 24, Name: "HDMI2"}, {ID: 29, Name: "DP"}, {ID: 30, Name: "USB-C"}},
+		volume:              80, hasVolume: true, deviceVolume: 80,
 	}
 	for _, rate := range []int{160, 144, 120, 60} {
 		for _, w := range []int{3360, 3200, 2560, 1920, 1600, 1280} {
@@ -409,6 +413,28 @@ func TestRefreshRatesPreserveMaxAndDedupe(t *testing.T) {
 	if !has165 || !has60 {
 		t.Fatalf("expected max rate 165Hz and active rate 60Hz in cachedShowRates, got %+v", s.cachedShowRates)
 	}
+	// 3. A 360Hz e-sports panel (360, 240, 180, 165, 144, 120, 60) running at 144Hz:
+	// must keep max (360), active (144), and baseline compatibility 60Hz.
+	s.modes = []display.Mode{
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 360},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 240},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 180},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 165},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 144},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 120},
+		{Width: 2560, Height: 1440, PixelWidth: 2560, PixelHeight: 1440, RefreshRate: 60},
+	}
+	s.current, s.hasCurrent = s.modes[4], true // active is 144Hz
+	s.updateDisplayCache()
+
+	var gotRates []int
+	for _, m := range s.cachedShowRates {
+		gotRates = append(gotRates, m.RefreshRate)
+	}
+	wantRates := []int{360, 240, 144, 60}
+	if len(gotRates) != len(wantRates) || gotRates[0] != 360 || gotRates[1] != 240 || gotRates[2] != 144 || gotRates[3] != 60 {
+		t.Fatalf("expected %v for 360Hz panel at 144Hz, got %v", wantRates, gotRates)
+	}
 }
 
 func TestLastInputRestoredForDDC(t *testing.T) {
@@ -501,12 +527,54 @@ func TestTargetVolumeStepsScalesToHardwareMaxVolume(t *testing.T) {
 func TestShutdownBlocksFurtherGammaApplication(t *testing.T) {
 	p, gamma := testPanel(t)
 	s := p.s
+	var restored bool
+	s.restoreGamma = func() { restored = true }
 	*gamma = [2]float64{1, 0}
 	s.shutdown()
+	if !restored {
+		t.Fatal("expected shutdown to invoke restoreGamma")
+	}
 	s.prefs.SoftBrightness = 30
 	s.applyGamma()
 	if *gamma != [2]float64{1, 0} {
 		t.Fatalf("expected applyGamma after shutdown to be ignored, got %v", *gamma)
 	}
 }
+
+func TestApplyGammaMarksDirtyOnlyWhenChanged(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	if s.dirty {
+		t.Fatal("expected clean store initially")
+	}
+	s.applyGamma() // no change from savedSoftBrightness=100, savedWarmth=0
+	if s.dirty {
+		t.Fatal("applyGamma marked dirty when neither SoftBrightness nor Warmth changed")
+	}
+	s.prefs.Warmth = 20
+	s.applyGamma()
+	if !s.dirty {
+		t.Fatal("expected applyGamma to mark dirty after Warmth changed")
+	}
+}
+
+func TestHardwareBrightnessLossResetsSoftwareBrightnessWithoutStacking(t *testing.T) {
+	p, gamma := testPanel(t)
+	s := p.s
+	s.hasBrightness, s.brightness = true, 25
+	s.prefs.SoftBrightness = 40 // stale software dimming from an earlier session
+	s.prefs.Warmth = 30
+	s.ddc = nil
+	s.applyDDC(ddcReading{})
+	if s.prefs.SoftBrightness != 100 {
+		t.Fatalf("expected SoftBrightness reset to 100 on DDC loss, got %v", s.prefs.SoftBrightness)
+	}
+	if *gamma != [2]float64{1.0, 0.3} {
+		t.Fatalf("expected gamma to keep warmth (0.3) at 100%% brightness (1.0), got %v", *gamma)
+	}
+	if s.notice == "" {
+		t.Fatal("expected notice when hardware brightness is lost")
+	}
+}
+
 

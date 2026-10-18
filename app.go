@@ -12,7 +12,7 @@ import (
 )
 
 // chrome is the panel's height besides the scrolling content: arrow,
-// header, tabs and footer, with a margin from the screen's edge.
+// header and footer, with a margin from the screen's edge.
 const chrome = 230
 
 // app is the menu bar (notification area) icon and the panel it opens.

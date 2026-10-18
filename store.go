@@ -45,10 +45,13 @@ func nameScenes() {
 // store holds what the panel shows and the actions that change it. Its
 // fields are read and written on the main thread only: network work runs in
 // goroutines and hands its results back through post.
+const discoverCooldown = 3 * time.Minute
+
 type store struct {
-	prefs    *settings
-	redraw   func()                                 // asks the open panel for a new frame
-	setGamma func(brightness, warmth float64) error // the monitor's, replaced in tests
+	prefs        *settings
+	redraw       func()                                 // asks the open panel for a new frame
+	setGamma     func(brightness, warmth float64) error // the monitor's, replaced in tests
+	restoreGamma func()                                 // display.RestoreGamma, replaced in tests
 
 	monitor    display.Monitor
 	modes      []display.Mode
@@ -60,6 +63,7 @@ type store struct {
 
 	link          *mitv.Link // the display's LAN remote, nil until found
 	detecting     bool
+	lastDiscover  time.Time
 	inputs        []mitv.Source
 	input         int  // the input chosen in the app, 0 before any
 	inputVerified bool // true only when read directly from hardware (DDC/CI VCP 0x60)
@@ -68,11 +72,16 @@ type store struct {
 	muted         bool // volume 0 as mute; returnTo is the level to restore
 	returnTo      float64
 
-	launchAtLogin bool
-	notice        string
-	dirty         bool // prefs changed since the last save
-	gammaTimer    *time.Timer
-	closed        bool
+	launchAtLogin       bool
+	notice              string
+	noticeGen           uint64
+	noticeTimer         *time.Timer
+	dirty               bool // prefs changed since the last save
+	savedSoftBrightness float64
+	savedWarmth         float64
+	savedInit           bool
+	gammaTimer          *time.Timer
+	closed              bool
 
 	volumeTarget    atomic.Int64
 	deviceVolume    int // the display's volume in hardware steps as last known
@@ -110,10 +119,15 @@ var controlCatalog = []struct {
 }
 
 func newStore() *store {
+	prefs := loadSettings()
 	s := &store{
-		prefs:         loadSettings(),
-		redraw:        func() {},
-		launchAtLogin: mygo.App.OpenAtLogin(),
+		prefs:               prefs,
+		redraw:              func() {},
+		restoreGamma:        display.RestoreGamma,
+		launchAtLogin:       mygo.App.OpenAtLogin(),
+		savedSoftBrightness: prefs.SoftBrightness,
+		savedWarmth:         prefs.Warmth,
+		savedInit:           true,
 	}
 	s.refreshDisplay()
 	s.setGamma = func(b, w float64) error { return s.monitor.SetGamma(b, w) }
@@ -127,6 +141,27 @@ func (s *store) post(fn func()) {
 		fn()
 		s.redraw()
 	})
+}
+
+// setNotice displays a banner and schedules auto-dismissal using a generation
+// counter so an older timer never clears a newer notice.
+func (s *store) setNotice(msg string) {
+	s.notice = msg
+	s.noticeGen++
+	if s.noticeTimer != nil {
+		s.noticeTimer.Stop()
+		s.noticeTimer = nil
+	}
+	if msg != "" && s.prefs != nil && s.prefs.path != "" && !s.closed {
+		gen := s.noticeGen
+		s.noticeTimer = time.AfterFunc(4*time.Second, func() {
+			s.post(func() {
+				if !s.closed && s.noticeGen == gen {
+					s.notice = ""
+				}
+			})
+		})
+	}
 }
 
 // MARK: Picture (software, through the gamma table)
@@ -169,7 +204,12 @@ func (s *store) applyGamma() {
 	if s.closed {
 		return
 	}
-	s.dirty = true
+	if !s.savedInit || s.prefs.SoftBrightness != s.savedSoftBrightness || s.prefs.Warmth != s.savedWarmth {
+		s.dirty = true
+		s.savedSoftBrightness = s.prefs.SoftBrightness
+		s.savedWarmth = s.prefs.Warmth
+		s.savedInit = true
+	}
 	brightness := s.prefs.SoftBrightness / 100
 	if s.hasBrightness {
 		brightness = 1 // DDC/CI owns brightness; gamma only adjusts warmth.
@@ -177,11 +217,11 @@ func (s *store) applyGamma() {
 	err := s.setGamma(brightness, s.prefs.Warmth/100)
 	switch {
 	case errors.Is(err, display.ErrGammaLimited):
-		s.notice = gammaLimited()
+		s.setNotice(gammaLimited())
 	case err != nil:
-		s.notice = gammaFailed()
+		s.setNotice(gammaFailed())
 	case s.notice == gammaLimited() || s.notice == gammaFailed():
-		s.notice = ""
+		s.setNotice("")
 	}
 }
 
@@ -264,13 +304,18 @@ func (s *store) setHostInput(id int) {
 	if name == "" {
 		name = strconv.Itoa(id)
 	}
-	s.notice = fmt.Sprintf(tr("已将 %s 设为本机接口", "Set %s as host connection"), name)
+	s.setNotice(fmt.Sprintf(tr("已将 %s 设为本机接口", "Set %s as host connection"), name))
 }
 
 // inputNote pairs the host's physical cable with the control channel.
 func (s *store) inputNote() string {
+	return s.inputNoteFor(s.hostInput())
+}
+
+// inputNoteFor formats the input header note using a pre-resolved hostID so
+// callers rendering the routing card do not evaluate hostInput() twice.
+func (s *store) inputNoteFor(hostID int) string {
 	channel := s.inputChannel()
-	hostID := s.hostInput()
 	var hostPortName string
 	for _, src := range s.sources() {
 		if src.ID == hostID {
@@ -296,17 +341,38 @@ func (s *store) pictureNote() string {
 }
 
 // connect finds the display on the LAN: the host found last time first,
-// then a scan.
+// then a full /24 scan.
 func (s *store) connect() {
+	s.connectWithScan(true)
+}
+
+// connectWithScan probes the cached host first; if unreachable (or empty), it
+// runs a full /24 Discover scan only when forceDiscover is true or the scan
+// cooldown has elapsed.
+func (s *store) connectWithScan(forceDiscover bool) {
 	if s.detecting {
 		return
 	}
+	cached := ""
+	if s.prefs != nil {
+		cached = s.prefs.NetworkHost
+	}
+	canDiscover := forceDiscover || s.lastDiscover.IsZero() || time.Since(s.lastDiscover) >= discoverCooldown
+	if cached == "" && !canDiscover {
+		return
+	}
 	s.detecting = true
-	cached := s.prefs.NetworkHost
 	go func() {
-		link := mitv.New(cached)
-		if _, err := link.DeviceName(); cached == "" || err != nil {
-			link = nil
+		var link *mitv.Link
+		if cached != "" {
+			candidate := mitv.New(cached)
+			if _, err := candidate.DeviceName(); err == nil {
+				link = candidate
+			}
+		}
+		didDiscover := false
+		if link == nil && canDiscover {
+			didDiscover = true
 			if host, err := mitv.Discover(); err == nil {
 				link = mitv.New(host)
 			}
@@ -323,6 +389,9 @@ func (s *store) connect() {
 		}
 		s.post(func() {
 			s.detecting = false
+			if didDiscover {
+				s.lastDiscover = time.Now()
+			}
 			s.link = link
 			if link == nil {
 				s.inputs, s.hasVolume = nil, s.ddcVolume // DDC/CI may still have volume
@@ -358,11 +427,11 @@ func (s *store) selectInput(src mitv.Source) {
 	// or overwrite DDC VCP LastInput with LAN source IDs.
 	s.inputVerified = false
 	label := formatSourceName(src.Name)
-	s.notice = tr("已向显示器发送切换指令：", "Switch command sent: ") + label
+	s.setNotice(tr("已向显示器发送切换指令：", "Switch command sent: ") + label)
 	go func() {
 		if err := link.Select(src.ID); err != nil {
 			s.post(func() {
-				s.notice = tr("切换到 ", "Switching to ") + label + tr(" 失败：显示器没有响应", " failed: the display did not answer")
+				s.setNotice(tr("切换到 ", "Switching to ") + label + tr(" 失败：显示器没有响应", " failed: the display did not answer"))
 			})
 		}
 	}()
@@ -435,7 +504,7 @@ func (s *store) chaseVolume() {
 			target, _ := s.targetVolumeSteps()
 			switch {
 			case failed:
-				s.notice = tr("调节音量失败：显示器没有响应", "Volume failed: the display did not answer")
+				s.setNotice(tr("调节音量失败：显示器没有响应", "Volume failed: the display did not answer"))
 			case target != actual:
 				s.chaseVolume() // the slider moved while the last step was sent
 			default:
@@ -532,12 +601,20 @@ func readDDC(d *display.DDC, all bool) ddcReading {
 	return r
 }
 
+func (s *store) onHardwareBrightnessLost() {
+	// Reset software brightness to 100% so the LUT only preserves warmth and
+	// never stacks dimming on top of the monitor's retained hardware backlight.
+	s.prefs.SoftBrightness = 100
+	s.applyGamma()
+	s.setNotice(tr("硬件背光控制已断开，已保留当前硬件亮度", "Hardware backlight lost; keeping current display brightness"))
+}
+
 func (s *store) applyDDC(r ddcReading) {
 	if s.ddc == nil {
 		wasHardwareBrightness := s.hasBrightness
 		s.hasBrightness, s.ddcVolume, s.ddcInputs, s.controls, s.inputVerified = false, false, nil, nil, false
 		if wasHardwareBrightness {
-			s.applyGamma()
+			s.onHardwareBrightnessLost()
 		}
 		return
 	}
@@ -588,7 +665,9 @@ func (s *store) applyDDC(r ddcReading) {
 			s.controls = append(s.controls, control{code: c.code, name: controlName(c.code, c.name), value: float64(v[0]), max: v[1]})
 		}
 	}
-	if wasHardwareBrightness != s.hasBrightness {
+	if wasHardwareBrightness && !s.hasBrightness {
+		s.onHardwareBrightnessLost()
+	} else if !wasHardwareBrightness && s.hasBrightness {
 		s.applyGamma()
 	}
 }
@@ -646,9 +725,9 @@ func (s *store) applyMode(m display.Mode) {
 		}
 	}
 	if err := s.monitor.Apply(target); err != nil {
-		s.notice = tr("切换失败，显示器拒绝了该模式", "Switch failed: the display refused the mode")
+		s.setNotice(tr("切换失败，显示器拒绝了该模式", "Switch failed: the display refused the mode"))
 	} else {
-		s.notice = tr("已切换到 ", "Switched to ") + target.Title() + " · " + strconv.Itoa(target.RefreshRate) + " Hz"
+		s.setNotice(tr("已切换到 ", "Switched to ") + target.Title() + " · " + strconv.Itoa(target.RefreshRate) + " Hz")
 	}
 	s.refreshDisplay()
 }
@@ -684,8 +763,16 @@ func (s *store) shutdown() {
 		s.gammaTimer.Stop()
 		s.gammaTimer = nil
 	}
+	if s.noticeTimer != nil {
+		s.noticeTimer.Stop()
+		s.noticeTimer = nil
+	}
 	s.save()
-	display.RestoreGamma()
+	if s.restoreGamma != nil {
+		s.restoreGamma()
+	} else {
+		display.RestoreGamma()
+	}
 	if s.ddc != nil {
 		s.ddc.Close()
 		s.ddc = nil
@@ -737,10 +824,14 @@ func (s *store) updateDisplayCache() {
 	// For monitors with > 4 rates, keep:
 	// 1. The monitor's highest supported rate (unique[0], so maximum capability is never lost)
 	// 2. The currently active rate (rate)
-	// 3. Standard common desktop tiers (240, 180, 165, 160, 144, 120, 60)
+	// 3. 60 Hz baseline compatibility tier when present
+	// 4. Highest remaining standard tiers (240, 180, 165, 160, 144, 120, 60) or remaining modes
 	// Capped at 4 chips for a neat single-row layout.
 	maxRate := unique[0].RefreshRate
 	picked := map[int]bool{maxRate: true, rate: true}
+	if seen[60] {
+		picked[60] = true
+	}
 
 	standardTiers := []int{240, 180, 165, 160, 144, 120, 60}
 	for _, tier := range standardTiers {
@@ -750,6 +841,12 @@ func (s *store) updateDisplayCache() {
 		if seen[tier] {
 			picked[tier] = true
 		}
+	}
+	for _, m := range unique {
+		if len(picked) >= 4 {
+			break
+		}
+		picked[m.RefreshRate] = true
 	}
 
 	var show []display.Mode
@@ -823,10 +920,9 @@ func (s *store) displaysChanged() {
 }
 
 func (s *store) panelOpened() {
-	// Retry here too: the launch attempt may have raced the network
-	// permission prompt.
+	// Probe the cached LAN host on every open, but rate-limit full /24 scans.
 	if s.link == nil {
-		s.connect()
+		s.connectWithScan(false)
 	} else {
 		s.readVolume()
 	}
@@ -835,7 +931,7 @@ func (s *store) panelOpened() {
 
 // detect looks for every control channel again.
 func (s *store) detect() {
-	s.connect()
+	s.connectWithScan(true)
 	s.probeDDC()
 }
 
@@ -844,7 +940,7 @@ func (s *store) detectingAny() bool { return s.detecting || s.probingDDC }
 
 func (s *store) toggleLaunchAtLogin() {
 	if err := mygo.App.SetOpenAtLogin(!s.launchAtLogin); err != nil {
-		s.notice = tr("登录项设置失败：", "Login item failed: ") + err.Error()
+		s.setNotice(tr("登录项设置失败：", "Login item failed: ") + err.Error())
 	}
 	s.launchAtLogin = mygo.App.OpenAtLogin()
 }

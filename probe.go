@@ -60,8 +60,6 @@ func probe() {
 		}
 		link = mitv.New(host)
 		name, _ = link.DeviceName()
-		prefs.NetworkHost = host
-		prefs.save()
 	}
 	fmt.Printf(tr("局域网: %s @ %s（%.2fs）\n", "LAN: %s @ %s (%.2fs)\n"), name, host, time.Since(start).Seconds())
 	if sources, err := link.Sources(); err == nil {
