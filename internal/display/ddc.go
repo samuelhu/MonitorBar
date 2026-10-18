@@ -48,7 +48,14 @@ func (m Monitor) OpenDDC() (*DDC, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, _, ok := t.read(VCPBrightness); !ok {
+	answered := false
+	for _, code := range []byte{VCPBrightness, VCPInput, VCPVolume, VCPContrast} {
+		if _, _, ok := t.read(code); ok {
+			answered = true
+			break
+		}
+	}
+	if !answered {
 		t.close()
 		return nil, fmt.Errorf("display: no DDC/CI answer")
 	}

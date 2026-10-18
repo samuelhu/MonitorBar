@@ -72,3 +72,15 @@ func TestGainsMonotonicAndNoDeadZone(t *testing.T) {
 		prevR = r
 	}
 }
+
+func TestLUTMatches(t *testing.T) {
+	a := [3][]float32{{0, 0.5, 1.0}, {0, 0.4, 0.8}, {0, 0.3, 0.6}}
+	b := [3][]float32{{0, 0.50002, 1.0}, {0, 0.4, 0.8}, {0, 0.3, 0.6}}
+	if !lutMatches(a, b, 1e-4) {
+		t.Fatal("expected post-quantization readback within 1e-4 to match")
+	}
+	c := [3][]float32{{0, 0.5, 1.0}, {0, 0.5, 1.0}, {0, 0.5, 1.0}}
+	if lutMatches(a, c, 1e-4) {
+		t.Fatal("expected external profile LUT to differ from tinted LUT")
+	}
+}

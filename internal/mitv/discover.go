@@ -28,10 +28,8 @@ func Discover() (string, error) {
 	dialer := net.Dialer{Timeout: 500 * time.Millisecond}
 
 	for _, host := range candidates() {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			break
-		default:
 		}
 
 		wg.Add(1)

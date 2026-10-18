@@ -37,6 +37,7 @@ var (
 	cgBeginDisplayConfiguration        func(config *uintptr) int32
 	cgConfigureDisplayWithDisplayMode  func(config uintptr, id uint32, mode uintptr, options uintptr) int32
 	cgCompleteDisplayConfiguration     func(config uintptr, option uint32) int32
+	cgCancelDisplayConfiguration       func(config uintptr) int32
 	cgDisplayGammaTableCapacity        func(id uint32) uint32
 	cgGetDisplayTransferByTable        func(id, capacity uint32, r, g, b *float32, count *uint32) int32
 	cgSetDisplayTransferByTable        func(id, size uint32, r, g, b *float32) int32
@@ -87,7 +88,8 @@ func load() {
 			&cgDisplayModeGetPixelWidth: "CGDisplayModeGetPixelWidth", &cgDisplayModeGetPixelHeight: "CGDisplayModeGetPixelHeight",
 			&cgDisplayModeGetRefreshRate: "CGDisplayModeGetRefreshRate", &cgDisplayModeIsUsableForDesktopGUI: "CGDisplayModeIsUsableForDesktopGUI",
 			&cgBeginDisplayConfiguration: "CGBeginDisplayConfiguration", &cgConfigureDisplayWithDisplayMode: "CGConfigureDisplayWithDisplayMode",
-			&cgCompleteDisplayConfiguration: "CGCompleteDisplayConfiguration", &cgDisplayGammaTableCapacity: "CGDisplayGammaTableCapacity",
+			&cgCompleteDisplayConfiguration: "CGCompleteDisplayConfiguration", &cgCancelDisplayConfiguration: "CGCancelDisplayConfiguration",
+			&cgDisplayGammaTableCapacity: "CGDisplayGammaTableCapacity",
 			&cgGetDisplayTransferByTable: "CGGetDisplayTransferByTable", &cgSetDisplayTransferByTable: "CGSetDisplayTransferByTable",
 			&cgDisplayRestoreColorSyncSettings: "CGDisplayRestoreColorSyncSettings", &cgEventSourceSecondsSinceLast: "CGEventSourceSecondsSinceLastEventType",
 		} {
@@ -266,11 +268,17 @@ func (m Mode) Release() {
 
 func (m Monitor) Apply(mode Mode) error {
 	load()
+	if mode.native == 0 {
+		return errors.New("display: invalid mode handle")
+	}
 	var config uintptr
 	if cgBeginDisplayConfiguration(&config) != 0 {
 		return errors.New("display: cannot begin configuration")
 	}
-	cgConfigureDisplayWithDisplayMode(config, m.handle, mode.native, 0)
+	if cgConfigureDisplayWithDisplayMode(config, m.handle, mode.native, 0) != 0 {
+		cgCancelDisplayConfiguration(config)
+		return errors.New("display: the display refused the mode")
+	}
 	if cgCompleteDisplayConfiguration(config, 2 /* kCGConfigurePermanently */) != 0 {
 		return errors.New("display: the display refused the mode")
 	}
@@ -282,7 +290,9 @@ var (
 	gammaMonitor   uint32       // display handle gammaBase was captured from
 	gammaBase      [3][]float32 // the ColorSync curve, captured before the first change
 	gammaBuf       [3][]float32 // reusable buffer to avoid allocations during slider dragging
+	lastEffective  [3][]float32 // post-quantization LUT read back after the last push
 	gammaApplied   bool         // true while a custom gamma table is active
+	verifyLUT      bool         // set by ResetGammaBase to check if ColorSync replaced the LUT
 	lastBrightness = -1.0
 	lastWarmth     = -999.0
 )
@@ -304,14 +314,22 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 	}
 
 	// Skip redundant system calls if setting and LUT capacity haven't changed on the same monitor.
-	if gammaBase[0] != nil && gammaMonitor == m.handle && int(capacity) == len(gammaBase[0]) && brightness == lastBrightness && warmth == lastWarmth {
+	if !verifyLUT && gammaBase[0] != nil && gammaMonitor == m.handle && int(capacity) == len(gammaBase[0]) && brightness == lastBrightness && warmth == lastWarmth {
 		return nil
 	}
 
 	if gammaBase[0] == nil || gammaMonitor != m.handle || int(capacity) != len(gammaBase[0]) {
 		if gammaApplied {
-			cgDisplayRestoreColorSyncSettings()
+			if gammaMonitor != m.handle && len(gammaBase[0]) > 0 {
+				// Restore the previous display's captured base table per-display
+				// without flashing other screens via global cgDisplayRestoreColorSyncSettings.
+				oldN := uint32(len(gammaBase[0]))
+				cgSetDisplayTransferByTable(gammaMonitor, oldN, &gammaBase[0][0], &gammaBase[1][0], &gammaBase[2][0])
+			} else {
+				cgDisplayRestoreColorSyncSettings()
+			}
 			gammaApplied = false
+			lastEffective = [3][]float32{}
 		}
 		r, g, b := make([]float32, capacity), make([]float32, capacity), make([]float32, capacity)
 		var n uint32
@@ -321,6 +339,22 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 		}
 		gammaBase = [3][]float32{r[:n], g[:n], b[:n]}
 		gammaMonitor = m.handle
+		verifyLUT = false
+	} else if verifyLUT {
+		verifyLUT = false
+		if gammaApplied && len(lastEffective[0]) == int(capacity) {
+			r, g, b := make([]float32, capacity), make([]float32, capacity), make([]float32, capacity)
+			var n uint32
+			cgGetDisplayTransferByTable(m.handle, capacity, &r[0], &g[0], &b[0], &n)
+			if int(n) == len(lastEffective[0]) {
+				cur := [3][]float32{r[:n], g[:n], b[:n]}
+				if !lutMatches(cur, lastEffective, 1e-4) {
+					// ColorSync or another tool replaced the hardware LUT with a
+					// new profile curve; adopt it directly as the new base without flashing.
+					gammaBase = cur
+				}
+			}
+		}
 	}
 	if len(gammaBase[0]) == 0 {
 		return errors.New("display: no gamma table")
@@ -349,6 +383,19 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 	if cgSetDisplayTransferByTable(m.handle, uint32(n), &gammaBuf[0][0], &gammaBuf[1][0], &gammaBuf[2][0]) != 0 {
 		return errors.New("display: the gamma table was refused")
 	}
+	if len(lastEffective[0]) != n {
+		lastEffective = [3][]float32{
+			make([]float32, n),
+			make([]float32, n),
+			make([]float32, n),
+		}
+	}
+	var effN uint32
+	if cgGetDisplayTransferByTable(m.handle, uint32(n), &lastEffective[0][0], &lastEffective[1][0], &lastEffective[2][0], &effN) != 0 || int(effN) != n {
+		for i := 0; i < 3; i++ {
+			copy(lastEffective[i], gammaBuf[i])
+		}
+	}
 	gammaApplied = true
 	lastBrightness = brightness
 	lastWarmth = warmth
@@ -361,6 +408,8 @@ func RestoreGamma() {
 	gammaMu.Lock()
 	wasApplied := gammaApplied
 	gammaApplied = false
+	verifyLUT = false
+	lastEffective = [3][]float32{}
 	lastBrightness, lastWarmth = 1.0, 0.0
 	gammaMu.Unlock()
 	if wasApplied {
@@ -368,12 +417,12 @@ func RestoreGamma() {
 	}
 }
 
-// ResetGammaBase invalidates the last-pushed brightness/warmth cache so the
-// next SetGamma call pushes the transfer table to hardware again without
-// flashing to 100% via cgDisplayRestoreColorSyncSettings (re-capturing the
-// base table only if the display handle or LUT capacity changed).
+// ResetGammaBase invalidates the last-pushed brightness/warmth cache and flags
+// the next SetGamma call to check whether ColorSync replaced the LUT, pushing
+// the transfer table again without flashing via cgDisplayRestoreColorSyncSettings.
 func ResetGammaBase() {
 	gammaMu.Lock()
+	verifyLUT = true
 	lastBrightness = -1.0
 	lastWarmth = -999.0
 	gammaMu.Unlock()

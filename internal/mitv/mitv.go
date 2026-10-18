@@ -30,11 +30,28 @@ type Source struct {
 	Name string
 }
 
+// lanSafeProxy bypasses environment HTTP proxies for direct LAN/loopback IPs,
+// mDNS .local names, and single-label local hostnames, while honoring
+// http.ProxyFromEnvironment for any routed domain.
+func lanSafeProxy(req *http.Request) (*url.URL, error) {
+	host := req.URL.Hostname()
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			return nil, nil
+		}
+	}
+	lower := strings.ToLower(host)
+	if strings.HasSuffix(lower, ".local") || (lower != "" && !strings.Contains(lower, ".")) {
+		return nil, nil
+	}
+	return http.ProxyFromEnvironment(req)
+}
+
 // sharedClient pools persistent TCP connections across LAN calls and discovery probes.
 var sharedClient = &http.Client{
 	Timeout: 4 * time.Second,
 	Transport: &http.Transport{
-		Proxy:               http.ProxyFromEnvironment,
+		Proxy:               lanSafeProxy,
 		MaxIdleConns:        16,
 		MaxIdleConnsPerHost: 8,
 		IdleConnTimeout:     90 * time.Second,

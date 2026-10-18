@@ -122,23 +122,40 @@ func dedupe(modes []Mode) []Mode {
 
 // gains scales the color channels in gamma-encoded LUT space with a linear
 // safe floor [0.12..1.0] so 0% never blacks out the display or creates a
-// bottom dead zone: positive warmth follows a smooth Planckian-inspired locus
-// (cutting green gently and blue more); negative warmth cuts red and green a
-// little (cooler).
+// bottom dead zone: warmth in [0..1] follows a smooth Planckian-inspired
+// locus (cutting green gently and blue more).
 func gains(brightness, warmth float64) (r, g, b float64) {
 	gain := max(0.0, min(brightness, 1.0))
 	gain = 0.12 + 0.88*gain
-	if warmth >= 0 {
-		w := min(warmth, 1.0)
-		green := 1 - (0.16*w + 0.06*w*w)
-		blue := 1 - 0.55*w
-		return gain, gain * green, gain * blue
-	}
-	cool := min(-warmth, 1.0)
-	return gain * (1 - 0.45*cool), gain * (1 - 0.15*cool), gain
+	w := max(0.0, min(warmth, 1.0))
+	green := 1 - (0.16*w + 0.06*w*w)
+	blue := 1 - 0.55*w
+	return gain, gain * green, gain * blue
 }
 
 // neutral reports settings that leave the display untouched.
 func neutral(brightness, warmth float64) bool {
-	return brightness >= 0.999 && warmth >= -0.001 && warmth <= 0.001
+	return brightness >= 0.999 && warmth <= 0.001
+}
+
+// lutMatches reports whether two 3-channel LUTs have identical lengths and
+// every entry differs by at most eps.
+func lutMatches(a, b [3][]float32, eps float32) bool {
+	n := len(a[0])
+	if n == 0 || len(b[0]) != n {
+		return false
+	}
+	for ch := 0; ch < 3; ch++ {
+		if len(a[ch]) != n || len(b[ch]) != n {
+			return false
+		}
+		ac, bc := a[ch], b[ch]
+		for i := 0; i < n; i++ {
+			diff := ac[i] - bc[i]
+			if diff < -eps || diff > eps {
+				return false
+			}
+		}
+	}
+	return true
 }

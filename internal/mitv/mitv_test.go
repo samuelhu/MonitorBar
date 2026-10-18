@@ -98,10 +98,27 @@ func TestHostValidationRejectsPortAndPathInjection(t *testing.T) {
 	}
 }
 
-func TestSharedClientPreservesProxyFromEnvironment(t *testing.T) {
+func TestSharedClientPreservesProxyAndBypassesLAN(t *testing.T) {
 	tr, ok := sharedClient.Transport.(*http.Transport)
 	if !ok || tr.Proxy == nil {
-		t.Fatalf("expected sharedClient.Transport to preserve http.ProxyFromEnvironment")
+		t.Fatalf("expected sharedClient.Transport to have a Proxy function")
+	}
+	for _, rawURL := range []string{
+		"http://192.168.1.25:6095/request",
+		"http://10.0.0.5:6095/request",
+		"http://127.0.0.1:6095/request",
+		"http://169.254.10.20:6095/request",
+		"http://mi-monitor.local:6095/request",
+		"http://mimonitor:6095/request",
+	} {
+		req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := tr.Proxy(req)
+		if err != nil || p != nil {
+			t.Errorf("Proxy(%q) = %v, %v; want nil (direct LAN)", rawURL, p, err)
+		}
 	}
 }
 
