@@ -7,8 +7,12 @@ import (
 	"path/filepath"
 )
 
+// settingsVersion is the schema of the settings file.
+const settingsVersion = 1
+
 // settings are the choices kept between launches, in a JSON file.
 type settings struct {
+	Version        int     `json:"version"`
 	SoftBrightness float64 `json:"softBrightness"` // gamma %, 0...100
 	Warmth         float64 `json:"warmth"`         // 0...100
 	NetworkHost    string  `json:"networkHost"`    // the display found last time
@@ -28,7 +32,7 @@ func dataDir() string {
 }
 
 func loadSettings() *settings {
-	s := &settings{SoftBrightness: 100,
+	s := &settings{Version: settingsVersion, SoftBrightness: 100,
 		path: filepath.Join(dataDir(), "settings.json")}
 	if data, err := os.ReadFile(s.path); err == nil {
 		_ = json.Unmarshal(data, s)
@@ -38,6 +42,9 @@ func loadSettings() *settings {
 }
 
 func (s *settings) normalize() {
+	if s.Version < 1 {
+		s.Version = settingsVersion
+	}
 	s.SoftBrightness = max(0, min(s.SoftBrightness, 100))
 	s.Warmth = max(0, min(s.Warmth, 100))
 	if s.LastInput < 0 || s.LastInput > 0xFFFF {
@@ -52,6 +59,7 @@ func (s *settings) save() error {
 	if s.path == "" {
 		return nil
 	}
+	s.Version = settingsVersion
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

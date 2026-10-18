@@ -9,6 +9,20 @@ import (
 
 const panelWidth = 360
 
+// One type scale for the panel: captions, small labels, body text, the
+// monitor title, and the large numeric read-outs.
+const (
+	textCaption float32 = 11
+	textSmall   float32 = 12
+	textBody    float32 = 13
+	textTitle   float32 = 16
+	textValue   float32 = 18
+
+	weightRegular  = 400
+	weightMedium   = 500
+	weightSemibold = 600
+)
+
 var (
 	accent      = ui.RGB(255, 105, 0) // Xiaomi orange
 	accentDeep  = ui.RGB(255, 69, 0)
@@ -37,9 +51,9 @@ func card(c *ui.Context, children func()) ui.Element {
 // groupLabel is the quiet caption above a card: one short word, optional note.
 func groupLabel(c *ui.Context, title, trailing string) {
 	ui.Row(c).Gap(6).Padding(0, 2, 0, 2).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, title).FontSize(11).FontWeight(590).LetterSpacing(0.2).TextColor(muted).Grow(1)
+		ui.Text(c, title).FontSize(textCaption).FontWeight(weightSemibold).LetterSpacing(0.2).TextColor(muted).Grow(1)
 		if trailing != "" {
-			ui.Text(c, trailing).FontSize(11).FontWeight(400).TextColor(muted)
+			ui.Text(c, trailing).FontSize(textCaption).FontWeight(weightRegular).TextColor(muted)
 		}
 	})
 }
@@ -64,11 +78,11 @@ func chip(c *ui.Context, selected bool) ui.Element {
 // buttons.
 func chipText(c *ui.Context, label string, selected bool) bool {
 	e := chip(c, selected).Grow(1).Height(32)
-	weight := 500
+	weight := weightMedium
 	if selected {
-		weight = 600
+		weight = weightSemibold
 	}
-	e.Children(func() { ui.Text(c, label).FontSize(13).FontWeight(weight).LetterSpacing(-0.1).SingleLine() })
+	e.Children(func() { ui.Text(c, label).FontSize(textBody).FontWeight(weight).LetterSpacing(-0.1).SingleLine() })
 	return e.Clicked()
 }
 
@@ -116,7 +130,7 @@ func (s sliderRow) show(c *ui.Context) bool {
 					icon(c, s.icon).FontSize(14).TextColor(muted)
 				})
 			}
-			ui.Text(c, s.title).FontSize(13).FontWeight(590).LetterSpacing(-0.1).Grow(1)
+			ui.Text(c, s.title).FontSize(textBody).FontWeight(weightSemibold).LetterSpacing(-0.1).Grow(1)
 			text := strconv.Itoa(int(math.Round(*s.value)))
 			if s.format != nil {
 				text = s.format(*s.value)
@@ -126,9 +140,9 @@ func (s sliderRow) show(c *ui.Context) bool {
 				numColor = muted
 			}
 			ui.Row(c).Gap(2.5).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, text).FontSize(18).FontWeight(600).LetterSpacing(-0.2).FontFeatures("tnum").TextColor(numColor)
+				ui.Text(c, text).FontSize(textValue).FontWeight(weightSemibold).LetterSpacing(-0.2).FontFeatures("tnum").TextColor(numColor)
 				if s.unit != "" {
-					ui.Text(c, s.unit).FontSize(11).FontWeight(500).TextColor(muted)
+					ui.Text(c, s.unit).FontSize(textCaption).FontWeight(weightMedium).TextColor(muted)
 				}
 			})
 		})

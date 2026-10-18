@@ -1,40 +1,28 @@
-// Package display reads and changes the target monitor through the
-// operating system: its modes, its gamma table and whether it is lit.
-// display_darwin.go and display_windows.go implement Target and the
-// Monitor methods.
+// Package display reads and changes the target monitor through macOS: its
+// modes, its gamma table and whether it is lit. display_darwin.go implements
+// Target and the Monitor methods.
 package display
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 )
-
-// ErrGammaLimited means the system refused the requested dimming and a
-// milder one was applied: Windows keeps gamma ramps near the identity.
-var ErrGammaLimited = errors.New("display: the system limited the dimming")
 
 // Monitor is the external display the app manages.
 type Monitor struct {
 	Name       string // e.g. "Mi Monitor"
 	Connection string // e.g. "HDMI", or "" when unknown
-	// Native is the panel's own resolution where the system tells it
-	// (Windows, from the EDID), zero otherwise.
-	NativeWidth, NativeHeight int
-	handle                    handle
+	handle     handle
 }
 
-// NativeSize is the monitor's own resolution: what the system reports, or
-// the largest mode drawn 1:1, as HiDPI modes draw more pixels than the
-// panel has. A reported size smaller than the current mode is not trusted
-// (virtual displays of remote desktops report one): the current mode wins.
+// NativeSize is the panel's own resolution: the largest mode drawn 1:1, as
+// HiDPI modes draw more pixels than the panel has. The current mode wins if
+// it is larger (virtual displays of remote desktops can report a smaller
+// native size than the mode in use).
 func (m Monitor) NativeSize(modes []Mode, current Mode) (w, h int) {
-	w, h = m.NativeWidth, m.NativeHeight
-	if w == 0 {
-		for _, mode := range modes {
-			if !mode.HiDPI() && mode.PixelWidth > w {
-				w, h = mode.PixelWidth, mode.PixelHeight
-			}
+	for _, mode := range modes {
+		if !mode.HiDPI() && mode.PixelWidth > w {
+			w, h = mode.PixelWidth, mode.PixelHeight
 		}
 	}
 	if !current.HiDPI() && current.PixelWidth > w {

@@ -19,9 +19,9 @@ const (
 	VCPSharpness  byte = 0x87
 )
 
-// ddcTransport is what each platform implements: blocking DDC/CI reads and
+// ddcTransport is what the platform implements: blocking DDC/CI reads and
 // writes, tens of milliseconds each. ddc_darwin.go speaks I2C through
-// IOAVService, ddc_windows.go the Monitor Configuration API (dxva2).
+// IOAVService.
 type ddcTransport interface {
 	read(code byte) (value, maximum int, ok bool)
 	write(code byte, value int) bool

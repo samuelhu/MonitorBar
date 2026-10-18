@@ -1,6 +1,6 @@
-// MonitorBar manages an external monitor from the macOS menu bar or the
-// Windows notification area: inputs and volume over the HyperOS LAN API,
-// hardware/software brightness and warmth, refresh rates, and DDC/CI controls.
+// MonitorBar manages an external monitor from the macOS menu bar: inputs and
+// volume over the HyperOS LAN API, hardware/software brightness and warmth,
+// refresh rates, and DDC/CI controls.
 //
 //	MonitorBar           run, panel opens on first launch
 //	MonitorBar --show    run and open the panel
@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 	"slices"
 
 	"github.com/egoist/mygo"
@@ -27,7 +26,7 @@ func main() {
 	// opening/closing the popover never creates or tears down a CAMetalLayer
 	// swapchain (which can cause WindowServer/DCP to flicker high-refresh
 	// HDMI/VRR displays or momentarily bypass custom gamma LUTs).
-	if runtime.GOOS == "darwin" && os.Getenv("MYGO_GPU") == "" {
+	if os.Getenv("MYGO_GPU") == "" {
 		_ = os.Setenv("MYGO_GPU", "0")
 	}
 	mygo.App.SetName("MonitorBar")

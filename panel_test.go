@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"image"
 	"image/png"
 	"os"
@@ -206,12 +207,12 @@ func TestPanelReportsNaturalHeight(t *testing.T) {
 }
 
 // A notice that appears after a click must grow the panel by itself, with
-// no other frame asked for: windows draw only on demand.
+// no other frame asked for: panels draw only on demand.
 func TestNoticeGrowsPanelWithoutInput(t *testing.T) {
 	p, _ := testPanel(t)
 	p.s.setGamma = func(b, w float64) error {
 		if b <= 0.5 {
-			return display.ErrGammaLimited
+			return errors.New("display: the gamma table was refused")
 		}
 		return nil
 	}
@@ -220,7 +221,7 @@ func TestNoticeGrowsPanelWithoutInput(t *testing.T) {
 	if err := tt.Click("阅读"); err != nil { // Click draws only the frames the view asks for
 		t.Fatal(err)
 	}
-	if !tt.HasText(gammaLimited()) {
+	if !tt.HasText(gammaFailed()) {
 		t.Fatalf("no notice in %q", tt.Texts())
 	}
 	if p.height <= before {
@@ -621,5 +622,18 @@ func TestDDCBrightnessReturnReappliesGamma(t *testing.T) {
 	}
 	if *gamma != [2]float64{1, 0.2} {
 		t.Fatalf("expected gamma (1, 0.2) once hardware brightness is active, got %v", *gamma)
+	}
+}
+
+// The panel chrome should come from measured header/footer heights once a
+// frame has rendered, not only from the conservative fallback.
+func TestChromeHeightUsesMeasuredParts(t *testing.T) {
+	p, _ := testPanel(t)
+	newTester(p)
+	if p.headerHeight <= 0 || p.footerHeight <= 0 {
+		t.Fatalf("header/footer not measured: header %v footer %v", p.headerHeight, p.footerHeight)
+	}
+	if got := p.chromeHeight(); got <= arrowHeight {
+		t.Fatalf("chrome height %v did not include the panel parts", got)
 	}
 }

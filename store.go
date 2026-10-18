@@ -196,9 +196,6 @@ func (s *store) effectiveBrightness() float64 {
 	return s.prefs.SoftBrightness
 }
 
-func gammaLimited() string {
-	return tr("Windows 限制了软件调光的幅度，已调到它允许的最暗。", "Windows limited the software dimming; it is at the darkest it allows.")
-}
 func gammaFailed() string {
 	return tr("调光失败：系统拒绝了这个设置。", "Dimming failed: the system refused the setting.")
 }
@@ -219,11 +216,9 @@ func (s *store) applyGamma() {
 	}
 	err := s.setGamma(brightness, s.prefs.Warmth/100)
 	switch {
-	case errors.Is(err, display.ErrGammaLimited):
-		s.setNotice(gammaLimited())
 	case err != nil:
 		s.setNotice(gammaFailed())
-	case s.notice == gammaLimited() || s.notice == gammaFailed():
+	case s.notice == gammaFailed():
 		s.setNotice("")
 	}
 }

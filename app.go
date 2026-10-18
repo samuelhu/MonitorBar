@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"runtime"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -11,11 +10,7 @@ import (
 	"monitorbar/internal/display"
 )
 
-// chrome is the panel's height besides the scrolling content: arrow,
-// header and footer, with a margin from the screen's edge.
-const chrome = 230
-
-// app is the menu bar (notification area) icon and the panel it opens.
+// app is the menu bar icon and the panel it opens.
 type app struct {
 	s        *store
 	panel    *panel
@@ -45,17 +40,13 @@ func (a *app) ready(show bool) {
 		mygo.Separator(),
 		{Label: tr("退出 MonitorBar", "Quit MonitorBar"), Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
 	})
-	if runtime.GOOS == "linux" { // AppIndicator reports no clicks
-		a.tray.SetMenu(menu)
-	} else {
-		a.tray.OnClick(a.toggle)
-		a.tray.OnRightClick(func() {
-			a.close()
-			a.tray.SetMenu(menu) // for this popup only, so clicks keep toggling the panel
-			defer a.tray.SetMenu(nil)
-			a.tray.PopUpMenu()
-		})
-	}
+	a.tray.OnClick(a.toggle)
+	a.tray.OnRightClick(func() {
+		a.close()
+		a.tray.SetMenu(menu) // for this popup only, so clicks keep toggling the panel
+		defer a.tray.SetMenu(nil)
+		a.tray.PopUpMenu()
+	})
 
 	changed := func() {
 		a.s.displaysChanged()
@@ -94,7 +85,7 @@ func (a *app) open() {
 	a.s.panelOpened()
 	icon := a.tray.Bounds()
 	area := mygo.Screen.DisplayNearestPoint(mygo.Point{X: icon.X + icon.Width/2, Y: icon.Y + icon.Height/2}).WorkArea
-	a.panel.maxContent = float32(max(area.Height-chrome, 200))
+	a.panel.maxContent = max(float32(area.Height)-a.panel.chromeHeight(), 200)
 	h := min(a.panel.height, area.Height)
 	if a.flyout != nil {
 		a.flyout.SetSize(panelWidth, h)
@@ -107,15 +98,13 @@ func (a *app) open() {
 		Placement: mygo.PlacementBottom,
 		Width:     panelWidth,
 		Height:    h,
-		Focusable: runtime.GOOS != "darwin",
+		Focusable: false,
 		Shadow:    true,
 		Content:   ui.View(a.panel.view),
 	})
-	if runtime.GOOS == "darwin" {
-		display.WatchOutsideClicks(func() {
-			mygo.RunOnMain(a.close)
-		})
-	}
+	display.WatchOutsideClicks(func() {
+		mygo.RunOnMain(a.close)
+	})
 	a.flyout.OnClose(func(e *mygo.CloseEvent) {
 		if !a.quitting {
 			e.PreventDefault()
@@ -136,7 +125,7 @@ func (a *app) close() {
 	}
 }
 
-// resize fits the panel to its content, which changes with the tab.
+// resize fits the panel to its content, which changes between states.
 func (a *app) resize(height int) {
 	if a.flyout == nil {
 		return
@@ -146,16 +135,9 @@ func (a *app) resize(height int) {
 }
 
 // pointArrow aims the arrow at the icon's middle, wherever the panel was
-// placed against the screen's edges. Without the icon's place (Windows
-// keeps it in the notification area's overflow), the panel goes to the
-// bottom right corner, where Windows puts the panels of its own icons.
+// placed against the screen's edges.
 func (a *app) pointArrow() {
 	icon, win := a.tray.Bounds(), a.flyout.Bounds()
-	if icon.Width == 0 && runtime.GOOS == "windows" {
-		area := mygo.Screen.PrimaryDisplay().WorkArea
-		a.flyout.SetPosition(area.X+area.Width-win.Width-12, area.Y+area.Height-win.Height-12)
-		return
-	}
 	a.panel.arrowX = float32(icon.X + icon.Width/2 - win.X)
 	a.flyout.Invalidate()
 }

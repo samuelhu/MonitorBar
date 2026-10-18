@@ -1,8 +1,6 @@
 package main
 
 import (
-	"runtime"
-
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
@@ -23,38 +21,35 @@ type panel struct {
 
 	height        int
 	contentHeight float32
+	headerHeight  float32
+	footerHeight  float32
 	settle        int  // frames still to draw while the sizes catch up
 	ownFrame      bool // this frame was asked for by settle
 }
 
 func (p *panel) view(c *ui.Context) {
 	c.SetTheme(darkTheme)
-	if runtime.GOOS == "windows" {
-		// An opaque root lets text use ClearType: subpixel glyphs need a
-		// solid background. Windows 11 rounds and outlines the flyout itself.
-		c.Root().Background(panelBottom)
-	} else {
-		c.Root().Background(ui.Transparent) // the arrow and the rounded corners show the desktop
-	}
+	c.Root().Background(ui.Transparent) // the arrow and the rounded corners show the desktop
 	shell := ui.Column(c).Width(panelWidth).TextColor(ink)
-	if runtime.GOOS == "darwin" {
-		shell.DrawOver(func(pt *ui.Painter, r ui.Rect) {
-			p.drawArrow(pt, r)
-		})
-	}
+	shell.DrawOver(func(pt *ui.Painter, r ui.Rect) {
+		p.drawArrow(pt, r)
+	})
 	shell.Children(func() {
-		if runtime.GOOS == "darwin" {
-			ui.Box(c).Height(arrowHeight)
-		}
+		ui.Box(c).Height(arrowHeight)
 		body := ui.Column(c).PaddingX(13).Gradient(panelTop, panelBottom, 135)
-		if runtime.GOOS == "darwin" { // Windows 11 rounds and outlines the flyout itself
-			body.Radius(16).Border(0.7, ui.RGBA(255, 255, 255, 0.12)).Clip()
-		}
+		body.Radius(16).Border(0.7, ui.RGBA(255, 255, 255, 0.12)).Clip()
+		var header, footer ui.Element
 		body.Children(func() {
-			p.header(c)
+			header = p.header(c)
 			p.content(c)
-			p.footer(c)
+			footer = p.footer(c)
 		})
+		if h := header.Bounds().H; h > 0 {
+			p.headerHeight = h
+		}
+		if h := footer.Bounds().H; h > 0 {
+			p.footerHeight = h
+		}
 	})
 	// Sizes come from the previous frame's layout. After a frame something
 	// else asked for (input, a result), draw one more to measure it, and
@@ -96,15 +91,15 @@ func (p *panel) drawArrow(pt *ui.Painter, r ui.Rect) {
 	pt.StrokePath(&edge, 0.7, ui.RGBA(255, 255, 255, 0.12))
 }
 
-func (p *panel) header(c *ui.Context) {
+func (p *panel) header(c *ui.Context) ui.Element {
 	s := p.s
-	ui.Row(c).Gap(10).Padding(16, 0, 14, 0).AlignItems(ui.Center).Children(func() {
+	return ui.Row(c).Gap(10).Padding(16, 0, 14, 0).AlignItems(ui.Center).Children(func() {
 		ui.Box(c).Size(32, 32).Radius(9).Center().Gradient(accent, accentDeep, 180).Border(0.7, ui.RGBA(255, 255, 255, 0.22)).Children(func() {
 			icon(c, "display").FontSize(15).TextColor(ui.RGB(255, 255, 255))
 		})
 		ui.Column(c).Gap(2).Grow(1).Children(func() {
-			ui.Text(c, s.monitor.Name).FontSize(16).FontWeight(600).LetterSpacing(-0.2).SingleLine()
-			ui.Text(c, p.caption()).FontSize(12).FontWeight(400).TextColor(muted).SingleLine()
+			ui.Text(c, s.monitor.Name).FontSize(textTitle).FontWeight(weightSemibold).LetterSpacing(-0.2).SingleLine()
+			ui.Text(c, p.caption()).FontSize(textSmall).FontWeight(weightRegular).TextColor(muted).SingleLine()
 		})
 		more := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Label(tr("更多", "More")).Tooltip(tr("更多", "More"))
 		more.Background(ui.RGBA(255, 255, 255, 0.06)).Border(0.7, cardStroke).TextColor(muted)
@@ -167,7 +162,7 @@ func (p *panel) content(c *ui.Context) {
 					Cursor(ui.CursorPointer)
 				banner.Children(func() {
 					ui.Box(c).Size(5, 5).Radius(2.5).Background(accent)
-					ui.Text(c, s.notice).FontSize(11).TextColor(ink).Grow(1)
+					ui.Text(c, s.notice).FontSize(textCaption).TextColor(ink).Grow(1)
 				})
 				if banner.Clicked() {
 					s.setNotice("")
@@ -183,7 +178,7 @@ func (p *panel) content(c *ui.Context) {
 
 // footer tells which channels reach the monitor. With none, it says
 // nothing: software dimming needs no explaining.
-func (p *panel) footer(c *ui.Context) {
+func (p *panel) footer(c *ui.Context) ui.Element {
 	s := p.s
 	text := ""
 	switch {
@@ -197,18 +192,29 @@ func (p *panel) footer(c *ui.Context) {
 		text = tr("正在检测显示器…", "Detecting display…")
 	}
 	if text == "" {
-		ui.Box(c).Height(12)
-		return
+		return ui.Box(c).Height(12)
 	}
 	dot := ui.RGB(52, 199, 89)
 	if s.link == nil && s.ddc == nil {
 		dot = ui.RGB(255, 204, 0)
 	}
-	ui.Row(c).Gap(6).Padding(10, 0, 4, 0).AlignItems(ui.Center).Children(func() {
+	return ui.Row(c).Gap(6).Padding(10, 0, 4, 0).AlignItems(ui.Center).Children(func() {
 		ui.Box(c).Size(6, 6).Radius(3).Background(dot)
-		ui.Text(c, text).FontSize(11).FontWeight(430).TextColor(muted).Grow(1)
+		ui.Text(c, text).FontSize(textCaption).FontWeight(weightRegular).TextColor(muted).Grow(1)
 		if s.detectingAny() {
 			ui.Spinner(c).Size(12, 12)
 		}
 	})
+}
+
+// chromeFallback is used until the first frame has measured header/footer.
+const chromeFallback = 230
+
+// chromeHeight is the panel height besides the scrolling content: arrow,
+// header, footer and a margin from the screen's edge.
+func (p *panel) chromeHeight() float32 {
+	if p.headerHeight <= 0 || p.footerHeight <= 0 {
+		return chromeFallback
+	}
+	return arrowHeight + p.headerHeight + p.footerHeight + 16
 }

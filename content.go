@@ -35,7 +35,7 @@ func (p *panel) scenes(c *ui.Context) {
 					icColor = accent
 				}
 				icon(c, sc.icon).FontSize(15).TextColor(icColor)
-				ui.Text(c, sc.name).FontSize(13).FontWeight(600).LetterSpacing(-0.1)
+				ui.Text(c, sc.name).FontSize(textBody).FontWeight(weightSemibold).LetterSpacing(-0.1)
 			})
 			if e.Clicked() {
 				s.apply(sc)
@@ -151,16 +151,16 @@ func chipSource(c *ui.Context, label string, isHost, selected bool) (clicked boo
 	if isHost && !selected {
 		e.Border(0.8, ui.RGBA(255, 255, 255, 0.16))
 	}
-	weight := 500
+	weight := weightMedium
 	if selected || isHost {
-		weight = 590
+		weight = weightSemibold
 	}
 	e.Children(func() {
 		ui.Row(c).Gap(5).Center().Children(func() {
 			if selected {
 				ui.Box(c).Size(5, 5).Radius(2.5).Background(accent)
 			}
-			ui.Text(c, label).FontSize(13).FontWeight(weight).LetterSpacing(-0.1).SingleLine()
+			ui.Text(c, label).FontSize(textBody).FontWeight(weight).LetterSpacing(-0.1).SingleLine()
 		})
 	})
 	return e.Clicked(), e.RightClicked()

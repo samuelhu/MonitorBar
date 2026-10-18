@@ -7,7 +7,8 @@
   "macos": {
     "infoPlist": {
       "LSUIElement": true,
-      "NSLocalNetworkUsageDescription": "通过局域网切换显示器输入源、调节音量。"
+      "LSMinimumSystemVersion": "12.0",
+      "NSLocalNetworkUsageDescription": "MonitorBar 通过本地网络切换显示器输入源、调节音量。 / MonitorBar uses the local network to switch display inputs and adjust volume."
     }
   }
 }
