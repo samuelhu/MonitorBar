@@ -76,6 +76,7 @@ type store struct {
 	notice              string
 	noticeGen           uint64
 	noticeTimer         *time.Timer
+	noticeDelay         time.Duration
 	dirty               bool // prefs changed since the last save
 	savedSoftBrightness float64
 	savedWarmth         float64
@@ -90,15 +91,16 @@ type store struct {
 
 	// DDC/CI, when the monitor answers it: hardware brightness, inputs and
 	// volume (when the LAN remote has none), and picture controls.
-	ddc           *display.DDC
-	probingDDC    bool
-	refreshingDDC bool
-	brightness    float64 // hardware %, meaningful when hasBrightness
-	hasBrightness bool
-	ddcInputs     []mitv.Source
-	ddcVolume     bool
-	controls      []control
-	maxima        map[byte]int // the range of each VCP code
+	ddc            *display.DDC
+	probingDDC     bool
+	refreshingDDC  bool
+	lastDDCRefresh time.Time
+	brightness     float64 // hardware %, meaningful when hasBrightness
+	hasBrightness  bool
+	ddcInputs      []mitv.Source
+	ddcVolume      bool
+	controls       []control
+	maxima         map[byte]int // the range of each VCP code
 }
 
 // control is a picture setting the monitor offers over DDC/CI.
@@ -125,6 +127,7 @@ func newStore() *store {
 		redraw:              func() {},
 		restoreGamma:        display.RestoreGamma,
 		launchAtLogin:       mygo.App.OpenAtLogin(),
+		noticeDelay:         4 * time.Second,
 		savedSoftBrightness: prefs.SoftBrightness,
 		savedWarmth:         prefs.Warmth,
 		savedInit:           true,
@@ -152,9 +155,9 @@ func (s *store) setNotice(msg string) {
 		s.noticeTimer.Stop()
 		s.noticeTimer = nil
 	}
-	if msg != "" && s.prefs != nil && s.prefs.path != "" && !s.closed {
+	if msg != "" && s.noticeDelay > 0 && !s.closed {
 		gen := s.noticeGen
-		s.noticeTimer = time.AfterFunc(4*time.Second, func() {
+		s.noticeTimer = time.AfterFunc(s.noticeDelay, func() {
 			s.post(func() {
 				if !s.closed && s.noticeGen == gen {
 					s.notice = ""
@@ -340,12 +343,6 @@ func (s *store) pictureNote() string {
 	return tr("软件调光", "Software dimming")
 }
 
-// connect finds the display on the LAN: the host found last time first,
-// then a full /24 scan.
-func (s *store) connect() {
-	s.connectWithScan(true)
-}
-
 // connectWithScan probes the cached host first; if unreachable (or empty), it
 // runs a full /24 Discover scan only when forceDiscover is true or the scan
 // cooldown has elapsed.
@@ -363,28 +360,40 @@ func (s *store) connectWithScan(forceDiscover bool) {
 	}
 	s.detecting = true
 	go func() {
-		var link *mitv.Link
-		if cached != "" {
-			candidate := mitv.New(cached)
-			if _, err := candidate.DeviceName(); err == nil {
-				link = candidate
+		// probeLink validates a host end-to-end; a host that answers but cannot
+		// list sources is treated as unusable so discovery can fall back.
+		type lanProbe struct {
+			link      *mitv.Link
+			sources   []mitv.Source
+			rawVol    int
+			maxVol    int
+			volumeErr error
+		}
+		probeLink := func(host string) lanProbe {
+			if host == "" {
+				return lanProbe{volumeErr: errors.New("mitv: no host")}
 			}
+			candidate := mitv.New(host)
+			if _, err := candidate.DeviceNameTimeout(2 * time.Second); err != nil {
+				return lanProbe{volumeErr: err}
+			}
+			sources, err := candidate.Sources()
+			if err != nil || len(sources) == 0 {
+				return lanProbe{volumeErr: err}
+			}
+			rawVol, maxVol, volumeErr := candidate.VolumeRaw()
+			return lanProbe{link: candidate, sources: sources, rawVol: rawVol, maxVol: maxVol, volumeErr: volumeErr}
+		}
+
+		result := lanProbe{}
+		if cached != "" {
+			result = probeLink(cached)
 		}
 		didDiscover := false
-		if link == nil && canDiscover {
+		if result.link == nil && canDiscover {
 			didDiscover = true
 			if host, err := mitv.Discover(); err == nil {
-				link = mitv.New(host)
-			}
-		}
-		var sources []mitv.Source
-		rawVol, maxVol, volumeErr := 0, 0, error(nil)
-		if link != nil {
-			var err error
-			if sources, err = link.Sources(); err != nil || len(sources) == 0 {
-				link = nil
-			} else {
-				rawVol, maxVol, volumeErr = link.VolumeRaw()
+				result = probeLink(host)
 			}
 		}
 		s.post(func() {
@@ -392,21 +401,21 @@ func (s *store) connectWithScan(forceDiscover bool) {
 			if didDiscover {
 				s.lastDiscover = time.Now()
 			}
-			s.link = link
-			if link == nil {
+			s.link = result.link
+			if result.link == nil {
 				s.inputs, s.hasVolume = nil, s.ddcVolume // DDC/CI may still have volume
 				return
 			}
 			// LAN remote has no current-source telemetry; never carry a DDC
 			// inputVerified flag onto LAN source chips.
 			s.inputVerified = false
-			s.prefs.NetworkHost, s.dirty = link.Host, true
+			s.prefs.NetworkHost, s.dirty = result.link.Host, true
 			s.save()
-			slices.SortFunc(sources, func(a, b mitv.Source) int { return a.ID - b.ID })
-			s.inputs = sources
-			if volumeErr == nil && maxVol > 0 {
-				s.deviceVolume, s.deviceMaxVolume = rawVol, maxVol
-				pct := max(0, min((rawVol*100+maxVol/2)/maxVol, 100))
+			slices.SortFunc(result.sources, func(a, b mitv.Source) int { return a.ID - b.ID })
+			s.inputs = result.sources
+			if result.volumeErr == nil && result.maxVol > 0 {
+				s.deviceVolume, s.deviceMaxVolume = result.rawVol, result.maxVol
+				pct := max(0, min((result.rawVol*100+result.maxVol/2)/result.maxVol, 100))
 				s.volume, s.hasVolume = float64(pct), true
 			}
 		})
@@ -568,6 +577,11 @@ func (s *store) probeDDC() {
 			}
 			s.probingDDC = false
 			s.ddc = d
+			if d != nil {
+				s.lastDDCRefresh = time.Now()
+			} else {
+				s.lastDDCRefresh = time.Time{}
+			}
 			s.applyDDC(r)
 		})
 	}()
@@ -606,13 +620,16 @@ func (s *store) onHardwareBrightnessLost() {
 	// never stacks dimming on top of the monitor's retained hardware backlight.
 	s.prefs.SoftBrightness = 100
 	s.applyGamma()
-	s.setNotice(tr("硬件背光控制已断开，已保留当前硬件亮度", "Hardware backlight lost; keeping current display brightness"))
+	s.setNotice(tr("硬件背光控制已断开，已改用软件调光（100%）", "Hardware backlight unavailable; switched to software dimming (100%)"))
 }
 
 func (s *store) applyDDC(r ddcReading) {
 	if s.ddc == nil {
 		wasHardwareBrightness := s.hasBrightness
 		s.hasBrightness, s.ddcVolume, s.ddcInputs, s.controls, s.inputVerified = false, false, nil, nil, false
+		if s.link == nil {
+			s.hasVolume = false // DDC may have been the only volume source
+		}
 		if wasHardwareBrightness {
 			s.onHardwareBrightnessLost()
 		}
@@ -678,12 +695,16 @@ func (s *store) refreshDDC() {
 	if d == nil || s.probingDDC || s.refreshingDDC {
 		return
 	}
+	if !s.lastDDCRefresh.IsZero() && time.Since(s.lastDDCRefresh) < 5*time.Second {
+		return
+	}
 	s.refreshingDDC = true
 	go func() {
 		r := readDDC(d, false)
 		s.post(func() {
 			s.refreshingDDC = false
 			if s.ddc == d {
+				s.lastDDCRefresh = time.Now()
 				s.applyDDC(r)
 			}
 		})

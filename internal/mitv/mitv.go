@@ -82,6 +82,13 @@ func (l *Link) DeviceName() (string, error) {
 	return l.DeviceNameContext(context.Background())
 }
 
+// DeviceNameTimeout answers whether the device is reachable within d.
+func (l *Link) DeviceNameTimeout(d time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	return l.DeviceNameContext(ctx)
+}
+
 // DeviceNameContext answers whether the device is reachable, with context cancellation support.
 func (l *Link) DeviceNameContext(ctx context.Context) (string, error) {
 	var data struct {

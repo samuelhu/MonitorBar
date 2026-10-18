@@ -318,13 +318,17 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 		return nil
 	}
 
-	if gammaBase[0] == nil || gammaMonitor != m.handle || int(capacity) != len(gammaBase[0]) {
+	if gammaBase[0] == nil || gammaMonitor != m.handle || int(capacity) != len(gammaBase[0]) || !gammaApplied {
 		if gammaApplied {
 			if gammaMonitor != m.handle && len(gammaBase[0]) > 0 {
 				// Restore the previous display's captured base table per-display
 				// without flashing other screens via global cgDisplayRestoreColorSyncSettings.
 				oldN := uint32(len(gammaBase[0]))
-				cgSetDisplayTransferByTable(gammaMonitor, oldN, &gammaBase[0][0], &gammaBase[1][0], &gammaBase[2][0])
+				if cgSetDisplayTransferByTable(gammaMonitor, oldN, &gammaBase[0][0], &gammaBase[1][0], &gammaBase[2][0]) != 0 {
+					// The old handle may be gone or its LUT capacity changed;
+					// fall back to the global restore rather than leave it tinted.
+					cgDisplayRestoreColorSyncSettings()
+				}
 			} else {
 				cgDisplayRestoreColorSyncSettings()
 			}
@@ -392,9 +396,9 @@ func (m Monitor) SetGamma(brightness, warmth float64) error {
 	}
 	var effN uint32
 	if cgGetDisplayTransferByTable(m.handle, uint32(n), &lastEffective[0][0], &lastEffective[1][0], &lastEffective[2][0], &effN) != 0 || int(effN) != n {
-		for i := 0; i < 3; i++ {
-			copy(lastEffective[i], gammaBuf[i])
-		}
+		// Without an effective readback we cannot distinguish our table from an
+		// external profile on the next verify; skip adoption instead of guessing.
+		lastEffective = [3][]float32{}
 	}
 	gammaApplied = true
 	lastBrightness = brightness

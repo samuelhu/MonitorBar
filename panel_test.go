@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -343,8 +344,8 @@ func TestSnapshotsEN(t *testing.T) {
 func TestInputSelectionClearsUnverifiedHighlight(t *testing.T) {
 	p, _ := testPanel(t)
 	s := p.s
-	s.inputVerified = true    // e.g. from an earlier DDC probe
-	s.prefs.LastInput = 0x11  // DDC VCP 0x60 HDMI 1 code must not be overwritten by LAN ID
+	s.inputVerified = true   // e.g. from an earlier DDC probe
+	s.prefs.LastInput = 0x11 // DDC VCP 0x60 HDMI 1 code must not be overwritten by LAN ID
 	tt := newTester(p)
 	if err := tt.Click("DP"); err != nil {
 		t.Fatal(err)
@@ -577,4 +578,48 @@ func TestHardwareBrightnessLossResetsSoftwareBrightnessWithoutStacking(t *testin
 	}
 }
 
+// A panel open during the discovery cooldown must not start a /24 scan.
+func TestConnectSkipsScanDuringCooldown(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	s.prefs.NetworkHost = ""
+	s.lastDiscover = time.Now()
+	s.connectWithScan(false)
+	if s.detecting {
+		t.Fatal("connectWithScan started a scan while the cooldown was active")
+	}
+}
 
+// When DDC is lost and no LAN volume exists, the volume card must not keep a
+// stale value that only DDC supplied.
+func TestDDCLossClearsStaleVolume(t *testing.T) {
+	p, _ := testPanel(t)
+	s := p.s
+	s.link = nil
+	s.hasVolume, s.ddcVolume = true, true
+	s.hasBrightness = false
+	s.ddc = nil
+	s.applyDDC(ddcReading{})
+	if s.hasVolume {
+		t.Fatal("DDC loss left a stale volume value visible")
+	}
+}
+
+// When DDC brightness appears, software brightness must stop dimming (gamma
+// brightness = 1) while warmth is preserved.
+func TestDDCBrightnessReturnReappliesGamma(t *testing.T) {
+	p, gamma := testPanel(t)
+	s := p.s
+	s.link = nil
+	s.hasBrightness = false
+	s.prefs.SoftBrightness = 50
+	s.prefs.Warmth = 20
+	s.ddc = &display.DDC{}
+	s.applyDDC(ddcReading{values: map[byte][2]int{display.VCPBrightness: {70, 100}}})
+	if !s.hasBrightness || s.brightness != 70 {
+		t.Fatalf("expected hardware brightness 70, got has=%v value=%v", s.hasBrightness, s.brightness)
+	}
+	if *gamma != [2]float64{1, 0.2} {
+		t.Fatalf("expected gamma (1, 0.2) once hardware brightness is active, got %v", *gamma)
+	}
+}
