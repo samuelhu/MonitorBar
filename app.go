@@ -56,6 +56,11 @@ func (a *app) ready(show bool) {
 	mygo.App.OnSecondInstance(func([]string, string) { a.open() })
 	mygo.Screen.OnDisplaysChanged(changed)
 	mygo.Power.OnResume(changed)
+	// prepareQuit closes windows before OnWillQuit, so stop the flyout's
+	// OnClose handler from cancelling the quit.
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.quitting = true
+	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		a.quitting = true
 		a.s.shutdown()
