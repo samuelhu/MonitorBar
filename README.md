@@ -62,14 +62,14 @@ REDMI 显示器不提供 DDC/CI，常见的显示器工具因此切不了输入�
 - 发布包为 Apple 芯片（arm64），要求 macOS 12+。
 - 同一时间只管理一台外接显示器：优先第一台外接屏，没有外接时管理主屏。
 - 局域网遥控需要显示器与 Mac 在同一网络，并允许“查找本地网络上的设备”；澎湃 OS 接口没有当前输入源回读。
-- 应用未使用 Developer ID 签名、未公证，首次打开会被 Gatekeeper 拦截，属预期。
+- 应用已使用 Developer ID 签名，但尚未公证；首次打开仍会被 Gatekeeper 拦截，需在系统设置里点「仍要打开」。
 - 软件调光走 Gamma 表，不是硬件背光；切换分辨率或唤醒后会重新应用。
 
 ## 安装
 
 1. 到 [Releases](https://github.com/samuelhu/MonitorBar/releases) 下载最新的 macOS arm64 dmg。
 2. 打开 dmg，把 **MonitorBar** 拖进「应用程序」。
-3. 首次打开会被 macOS 拦截：先双击一次 MonitorBar，然后打开 **系统设置 → 隐私与安全性**，滚动到底部点「**仍要打开**」并输入密码。（macOS 14 及更早版本可直接右键 → 打开。）
+3. 应用已用 Developer ID 签名，但尚未公证，首次打开仍会被 macOS 拦截：先双击一次 MonitorBar，然后打开 **系统设置 → 隐私与安全性**，滚动到底部点「**仍要打开**」并输入密码。（macOS 14 及更早版本可直接右键 → 打开。）
 4. 第一次连接显示器时，允许「**查找本地网络上的设备**」——切换输入源、调音量都靠它。
 
 可选：面板右上角「⋯」→「登录时启动」。登录项需要以 `.app` 运行；直接启动裸二进制会提示需要应用包。
@@ -144,7 +144,7 @@ MonitorBar puts external-monitor control in the Mac menu bar: scene presets, bri
 
 It targets HyperOS monitors such as the REDMI G Pro 27U, whose LAN API switches inputs and changes volume without DDC/CI. DDC/CI monitors use their hardware backlight and picture controls; gamma-table dimming and warmth work on displays that expose a gamma table. Input and volume prefer the LAN remote, then DDC/CI.
 
-Release builds target Apple Silicon (arm64) and require macOS 12+. The app manages one external display at a time. The LAN API has no current-input readback, so the app only highlights an input when DDC/CI verifies it; right-click a port to mark the host connection. The build is not signed with a Developer ID and not notarized.
+Release builds target Apple Silicon (arm64) and require macOS 12+. The app manages one external display at a time. The LAN API has no current-input readback, so the app only highlights an input when DDC/CI verifies it; right-click a port to mark the host connection. The build is signed with a Developer ID but not notarized; Gatekeeper still requires Open Anyway on first launch.
 
 Install from [Releases](https://github.com/samuelhu/MonitorBar/releases), drag to Applications, then allow **Open Anyway** in System Settings → Privacy & Security and permit local-network access. Build with `go tool mygo build -platform darwin/arm64`; tests with `go test ./...`.
 
