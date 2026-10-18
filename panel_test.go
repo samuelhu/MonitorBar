@@ -660,18 +660,20 @@ func TestMaxContentFollowsMeasuredChrome(t *testing.T) {
 }
 
 // A footer that grows while the panel is open must update the scroll cap
-// before the next layout pass, or the panel overflows the work area.
+// and settle p.height before rendering stops, even when inner content height
+// itself does not change.
 func TestMaxContentUpdatesAfterFooterGrowth(t *testing.T) {
 	p, _ := testPanel(t)
-	p.maxHeight = 500
-	p.s.link = nil // empty footer first
+	p.maxHeight = 350
+	p.s.link = nil // empty 12pt footer first; inner (~400pt) exceeds maxContent
 	tt := newTester(p)
 	if p.footerHeight <= 0 {
 		t.Fatalf("footer not measured: %v", p.footerHeight)
 	}
-	before := p.maxContent
-	p.s.link = mitv.New("192.0.2.1") // footer becomes the connected row
-	tt.Frame()                       // external frame + settle frames
+	beforeCap := p.maxContent
+	beforeHeight := p.height
+	p.s.detecting = true // footer grows without changing inner content height
+	tt.Frame()           // external frame + settle frames
 	if p.footerHeight <= 12 {
 		t.Fatalf("footer did not grow: %v", p.footerHeight)
 	}
@@ -679,10 +681,10 @@ func TestMaxContentUpdatesAfterFooterGrowth(t *testing.T) {
 	if p.maxContent > want+0.01 || p.maxContent < want-0.01 {
 		t.Fatalf("maxContent %v, want %v after footer growth", p.maxContent, want)
 	}
-	if p.maxContent >= before {
-		t.Fatalf("maxContent did not shrink: %v -> %v", before, p.maxContent)
+	if p.maxContent >= beforeCap {
+		t.Fatalf("maxContent did not shrink: %v -> %v", beforeCap, p.maxContent)
 	}
-	if total := p.maxContent + p.chromeHeight(); total > float32(p.maxHeight) {
-		t.Fatalf("panel would exceed work area: %v > %d", total, p.maxHeight)
+	if p.height != beforeHeight || p.height > p.maxHeight {
+		t.Fatalf("panel height %d did not settle back to %d (maxHeight %d)", p.height, beforeHeight, p.maxHeight)
 	}
 }

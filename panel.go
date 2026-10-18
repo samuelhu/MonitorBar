@@ -58,7 +58,7 @@ func (p *panel) view(c *ui.Context) {
 		}
 		if chromeChanged {
 			p.updateMaxContent()
-			p.settle = max(p.settle, 1)
+			p.settle = max(p.settle, 2)
 			c.Invalidate()
 		}
 	})
