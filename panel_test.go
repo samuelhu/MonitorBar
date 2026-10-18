@@ -658,3 +658,31 @@ func TestMaxContentFollowsMeasuredChrome(t *testing.T) {
 		t.Fatalf("panel would exceed the work area: %v > 600", total)
 	}
 }
+
+// A footer that grows while the panel is open must update the scroll cap
+// before the next layout pass, or the panel overflows the work area.
+func TestMaxContentUpdatesAfterFooterGrowth(t *testing.T) {
+	p, _ := testPanel(t)
+	p.maxHeight = 500
+	p.s.link = nil // empty footer first
+	tt := newTester(p)
+	if p.footerHeight <= 0 {
+		t.Fatalf("footer not measured: %v", p.footerHeight)
+	}
+	before := p.maxContent
+	p.s.link = mitv.New("192.0.2.1") // footer becomes the connected row
+	tt.Frame()                       // external frame + settle frames
+	if p.footerHeight <= 12 {
+		t.Fatalf("footer did not grow: %v", p.footerHeight)
+	}
+	want := float32(p.maxHeight) - p.chromeHeight()
+	if p.maxContent > want+0.01 || p.maxContent < want-0.01 {
+		t.Fatalf("maxContent %v, want %v after footer growth", p.maxContent, want)
+	}
+	if p.maxContent >= before {
+		t.Fatalf("maxContent did not shrink: %v -> %v", before, p.maxContent)
+	}
+	if total := p.maxContent + p.chromeHeight(); total > float32(p.maxHeight) {
+		t.Fatalf("panel would exceed work area: %v > %d", total, p.maxHeight)
+	}
+}

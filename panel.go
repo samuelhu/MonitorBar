@@ -47,11 +47,19 @@ func (p *panel) view(c *ui.Context) {
 			p.content(c)
 			footer = p.footer(c)
 		})
-		if h := header.Bounds().H; h > 0 {
+		chromeChanged := false
+		if h := header.Bounds().H; h > 0 && h != p.headerHeight {
 			p.headerHeight = h
+			chromeChanged = true
 		}
-		if h := footer.Bounds().H; h > 0 {
+		if h := footer.Bounds().H; h > 0 && h != p.footerHeight {
 			p.footerHeight = h
+			chromeChanged = true
+		}
+		if chromeChanged {
+			p.updateMaxContent()
+			p.settle = max(p.settle, 1)
+			c.Invalidate()
 		}
 	})
 	// Sizes come from the previous frame's layout. After a frame something
