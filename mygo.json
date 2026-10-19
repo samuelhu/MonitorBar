@@ -1,7 +1,7 @@
 {
   "name": "MonitorBar",
   "identifier": "com.samuelhu.MonitorBar",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "copyright": "Copyright © 2026 binaryify & samuelhu",
   "out": "build",
   "macos": {
