@@ -138,49 +138,56 @@ func TestDDCOnly(t *testing.T) {
 	}
 }
 
-// TestSnapshots writes the panel as a PNG to $MONITORBAR_SNAPSHOTS, to look at.
+// shootPanel writes the panel as it is in tt to dir/name.png, cropped to
+// the panel's natural height.
+func shootPanel(t *testing.T, dir, name string, p *panel, tt *ui.Tester) {
+	t.Helper()
+	img := tt.Image()
+	crop := img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
+	f, err := os.Create(filepath.Join(dir, name+".png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, crop); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestSnapshots writes the panel in the dark appearance and in the light
+// one as PNGs to $MONITORBAR_SNAPSHOTS, to look at.
 func TestSnapshots(t *testing.T) {
 	dir := os.Getenv("MONITORBAR_SNAPSHOTS")
 	if dir == "" {
 		t.Skip("set MONITORBAR_SNAPSHOTS to a directory")
 	}
-	p, _ := testPanel(t)
-	tt := newTester(p)
-	tt.SetScale(2)
-	tt.Frame()
-	img := tt.Image()
-	crop := img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
-	f, err := os.Create(filepath.Join(dir, "panel.png"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := png.Encode(f, crop); err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
-
-	if err := tt.Click("静音"); err == nil {
+	for _, appearance := range []struct {
+		suffix string
+		dark   bool
+	}{{"", true}, {"_light", false}} {
+		p, _ := testPanel(t)
+		tt := newTester(p)
+		tt.SetScale(2)
+		tt.SetDark(appearance.dark)
 		tt.Frame()
-		img = tt.Image()
-		crop = img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
-		if f, err := os.Create(filepath.Join(dir, "panel_muted.png")); err == nil {
-			_ = png.Encode(f, crop)
-			f.Close()
-		}
-	}
+		shootPanel(t, dir, "panel"+appearance.suffix, p, tt)
 
-	// Capture user's exact state: Brightness 50%, Warmth 25%, Volume 19%
-	p.s.hasBrightness = false
-	p.s.prefs.SoftBrightness = 50
-	p.s.prefs.Warmth = 25
-	p.s.volume = 19
-	p.s.deviceVolume = 19
-	tt.Frame()
-	img = tt.Image()
-	crop = img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
-	if f, err := os.Create(filepath.Join(dir, "panel_user_state.png")); err == nil {
-		_ = png.Encode(f, crop)
-		f.Close()
+		if err := tt.Click("静音"); err == nil {
+			tt.Frame()
+			shootPanel(t, dir, "panel"+appearance.suffix+"_muted", p, tt)
+		}
+
+		// Capture user's exact state: Brightness 50%, Warmth 25%, Volume 19%
+		p.s.hasBrightness = false
+		p.s.prefs.SoftBrightness = 50
+		p.s.prefs.Warmth = 25
+		p.s.volume = 19
+		p.s.deviceVolume = 19
+		tt.Frame()
+		shootPanel(t, dir, "panel"+appearance.suffix+"_user_state", p, tt)
 	}
 }
 
@@ -305,7 +312,8 @@ func TestUseSystemLanguage(t *testing.T) {
 	}
 }
 
-// TestSnapshotsEN writes the English panel when $MONITORBAR_SNAPSHOTS is set.
+// TestSnapshotsEN writes the English panel in both appearances when
+// $MONITORBAR_SNAPSHOTS is set.
 func TestSnapshotsEN(t *testing.T) {
 	dir := os.Getenv("MONITORBAR_SNAPSHOTS")
 	if dir == "" {
@@ -314,30 +322,67 @@ func TestSnapshotsEN(t *testing.T) {
 	prev := lang
 	t.Cleanup(func() { lang = prev; nameScenes() })
 	useSystemLanguage("en-US")
-	p, _ := testPanel(t)
-	tt := newTester(p)
-	tt.SetScale(2)
-	tt.Frame()
-	img := tt.Image()
-	crop := img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
-	f, err := os.Create(filepath.Join(dir, "panel_en.png"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := png.Encode(f, crop); err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
-
-	if err := tt.Click("Mute"); err == nil {
+	for _, appearance := range []struct {
+		suffix string
+		dark   bool
+	}{{"", true}, {"_light", false}} {
+		p, _ := testPanel(t)
+		tt := newTester(p)
+		tt.SetScale(2)
+		tt.SetDark(appearance.dark)
 		tt.Frame()
-		img = tt.Image()
-		crop = img.SubImage(image.Rect(0, 0, img.Bounds().Dx(), p.height*2))
-		if f, err := os.Create(filepath.Join(dir, "panel_en_muted.png")); err == nil {
-			_ = png.Encode(f, crop)
-			f.Close()
+		shootPanel(t, dir, "panel_en"+appearance.suffix, p, tt)
+
+		if err := tt.Click("Mute"); err == nil {
+			tt.Frame()
+			shootPanel(t, dir, "panel_en"+appearance.suffix+"_muted", p, tt)
 		}
 	}
+}
+
+// The panel follows the system's appearance: light by default, dark when
+// the system is dark, and it switches while it is open.
+func TestFollowsSystemAppearance(t *testing.T) {
+	p, _ := testPanel(t)
+	tt := ui.NewTester(p.view, panelWidth, 1100)
+	for range 3 {
+		tt.Frame()
+	}
+	light := averageLightness(tt.Image())
+	tt.SetDark(true)
+	for range 3 {
+		tt.Frame()
+	}
+	dark := averageLightness(tt.Image())
+	if light-dark < 40 {
+		t.Fatalf("light frame (%.0f) is not clearly lighter than dark (%.0f)", light, dark)
+	}
+	tt.SetDark(false)
+	for range 3 {
+		tt.Frame()
+	}
+	if back := averageLightness(tt.Image()); back-light > 2 || light-back > 2 {
+		t.Fatalf("light frame (%.0f) did not come back after switching (got %.0f)", light, back)
+	}
+}
+
+// averageLightness is the mean luma of the opaque pixels of a frame, 0 for
+// its alpha.
+func averageLightness(img *image.RGBA) float64 {
+	var sum float64
+	var n int
+	for y := img.Rect.Min.Y; y < img.Rect.Max.Y; y++ {
+		for x := img.Rect.Min.X; x < img.Rect.Max.X; x++ {
+			if c := img.RGBAAt(x, y); c.A > 0 {
+				sum += 0.2126*float64(c.R) + 0.7152*float64(c.G) + 0.0722*float64(c.B)
+				n++
+			}
+		}
+	}
+	if n == 0 {
+		return 0
+	}
+	return sum / float64(n)
 }
 
 // Clicking a LAN input sends the switch command and clears inputVerified so no

@@ -24,15 +24,16 @@ func (p *panel) overview(c *ui.Context) {
 // scenes is the hero row: three presets, applied in one click.
 func (p *panel) scenes(c *ui.Context) {
 	s := p.s
+	sk := skinOf(c)
 	groupLabel(c, tr("场景", "Scenes"), tr("舒适起点", "Starting points"))
 	ui.Row(c).Gap(6).Children(func() {
 		for _, sc := range scenes {
 			active := s.isActive(sc)
 			e := chip(c.Key(sc.name), active).Grow(1).Height(50).Gap(3).Tooltip(sceneTooltip(sc))
 			e.Children(func() {
-				icColor := muted
+				icColor := sk.muted
 				if active {
-					icColor = accent
+					icColor = sk.accentInk
 				}
 				icon(c, sc.icon).FontSize(15).TextColor(icColor)
 				ui.Text(c, sc.name).FontSize(textBody).FontWeight(weightSemibold).LetterSpacing(-0.1)
@@ -146,10 +147,11 @@ func (p *panel) routing(c *ui.Context) {
 }
 
 func chipSource(c *ui.Context, label string, isHost, selected bool) (clicked bool, rightClicked bool) {
+	sk := skinOf(c)
 	e := chip(c, selected).Grow(1).Height(32).
 		Tooltip(tr("点击向显示器发送切换指令 · 右键设为本机连接", "Click to switch input · Right-click to set as host"))
 	if isHost && !selected {
-		e.Border(0.8, ui.RGBA(255, 255, 255, 0.16))
+		e.Border(0.8, sk.hostBorder)
 	}
 	weight := weightMedium
 	if selected || isHost {
@@ -158,7 +160,7 @@ func chipSource(c *ui.Context, label string, isHost, selected bool) (clicked boo
 	e.Children(func() {
 		ui.Row(c).Gap(5).Center().Children(func() {
 			if selected {
-				ui.Box(c).Size(5, 5).Radius(2.5).Background(accent)
+				ui.Box(c).Size(5, 5).Radius(2.5).Background(sk.accent)
 			}
 			ui.Text(c, label).FontSize(textBody).FontWeight(weight).LetterSpacing(-0.1).SingleLine()
 		})

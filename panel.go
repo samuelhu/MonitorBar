@@ -31,16 +31,19 @@ type panel struct {
 
 func (p *panel) view(c *ui.Context) {
 	p.updateMaxContent()
-	c.SetTheme(darkTheme)
+	// The frame starts with the theme of the system's appearance: keep that
+	// appearance, and give the framework's widgets the panel's accent.
+	c.SetTheme(widgetTheme(c))
+	sk := skinOf(c)
 	c.Root().Background(ui.Transparent) // the arrow and the rounded corners show the desktop
-	shell := ui.Column(c).Width(panelWidth).TextColor(ink)
+	shell := ui.Column(c).Width(panelWidth).TextColor(sk.ink)
 	shell.DrawOver(func(pt *ui.Painter, r ui.Rect) {
-		p.drawArrow(pt, r)
+		p.drawArrow(pt, r, sk)
 	})
 	shell.Children(func() {
 		ui.Box(c).Height(arrowHeight)
-		body := ui.Column(c).PaddingX(13).Gradient(panelTop, panelBottom, 135)
-		body.Radius(16).Border(0.7, ui.RGBA(255, 255, 255, 0.12)).Clip()
+		body := ui.Column(c).PaddingX(13).Gradient(sk.panelTop, sk.panelBottom, 135)
+		body.Radius(16).Border(0.7, sk.panelStroke).Clip()
 		var header, footer ui.Element
 		body.Children(func() {
 			header = p.header(c)
@@ -81,7 +84,7 @@ func (p *panel) view(c *ui.Context) {
 	}
 }
 
-func (p *panel) drawArrow(pt *ui.Painter, r ui.Rect) {
+func (p *panel) drawArrow(pt *ui.Painter, r ui.Rect, sk *skin) {
 	x := min(max(p.arrowX, 22), panelWidth-22)
 	left, tip, right := r.X+x-11, r.X+x, r.X+x+11
 	base := r.Y + arrowHeight
@@ -92,32 +95,33 @@ func (p *panel) drawArrow(pt *ui.Painter, r ui.Rect) {
 	fill.QuadTo(tip-3, base-2, tip, r.Y+0.5)
 	fill.QuadTo(tip+3, base-2, right, base+1.2)
 	fill.Close()
-	pt.FillPath(&fill, panelTop)
+	pt.FillPath(&fill, sk.panelTop)
 
 	// Stroke only the two sloped sides so the body's 0.7px border continues smoothly over the tip.
 	var edge ui.Path
 	edge.MoveTo(left, base+0.35)
 	edge.QuadTo(tip-3, base-2, tip, r.Y+0.5)
 	edge.QuadTo(tip+3, base-2, right, base+0.35)
-	pt.StrokePath(&edge, 0.7, ui.RGBA(255, 255, 255, 0.12))
+	pt.StrokePath(&edge, 0.7, sk.panelStroke)
 }
 
 func (p *panel) header(c *ui.Context) ui.Element {
 	s := p.s
+	sk := skinOf(c)
 	return ui.Row(c).Gap(10).Padding(16, 0, 14, 0).AlignItems(ui.Center).Children(func() {
-		ui.Box(c).Size(32, 32).Radius(9).Center().Gradient(accent, accentDeep, 180).Border(0.7, ui.RGBA(255, 255, 255, 0.22)).Children(func() {
-			icon(c, "display").FontSize(15).TextColor(ui.RGB(255, 255, 255))
+		ui.Box(c).Size(32, 32).Radius(9).Center().Gradient(sk.accent, sk.accentDeep, 180).Border(0.7, sk.iconBorder).Children(func() {
+			icon(c, "display").FontSize(15).TextColor(sk.accentText)
 		})
 		ui.Column(c).Gap(2).Grow(1).Children(func() {
 			ui.Text(c, s.monitor.Name).FontSize(textTitle).FontWeight(weightSemibold).LetterSpacing(-0.2).SingleLine()
-			ui.Text(c, p.caption()).FontSize(textSmall).FontWeight(weightRegular).TextColor(muted).SingleLine()
+			ui.Text(c, p.caption()).FontSize(textSmall).FontWeight(weightRegular).TextColor(sk.muted).SingleLine()
 		})
 		more := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Label(tr("更多", "More")).Tooltip(tr("更多", "More"))
-		more.Background(ui.RGBA(255, 255, 255, 0.06)).Border(0.7, cardStroke).TextColor(muted)
+		more.Background(sk.controlFill).Border(0.7, sk.cardStroke).TextColor(sk.muted)
 		if more.Pressed() {
-			more.Background(ui.RGBA(255, 255, 255, 0.16)).TextColor(ink)
+			more.Background(sk.controlPressed).TextColor(sk.ink)
 		} else if more.Hovered() {
-			more.Background(ui.RGBA(255, 255, 255, 0.11)).TextColor(ink)
+			more.Background(sk.controlHover).TextColor(sk.ink)
 		}
 		more.Children(func() {
 			icon(c, "ellipsis").FontSize(15)
@@ -138,11 +142,11 @@ func (p *panel) header(c *ui.Context) ui.Element {
 			}
 		})
 		power := ui.Box(c).Size(32, 32).Radius(16).Center().Cursor(ui.CursorPointer).Tooltip(tr("立即熄屏", "Sleep display")).Label(tr("立即熄屏", "Sleep display"))
-		power.Background(ui.RGBA(255, 255, 255, 0.06)).Border(0.7, cardStroke).TextColor(muted)
+		power.Background(sk.controlFill).Border(0.7, sk.cardStroke).TextColor(sk.muted)
 		if power.Pressed() {
-			power.Background(ui.RGBA(255, 255, 255, 0.16)).TextColor(ink)
+			power.Background(sk.controlPressed).TextColor(sk.ink)
 		} else if power.Hovered() {
-			power.Background(ui.RGBA(255, 255, 255, 0.11)).TextColor(ink)
+			power.Background(sk.controlHover).TextColor(sk.ink)
 		}
 		power.Children(func() { icon(c, "power").FontSize(14) })
 		if power.Clicked() {
@@ -162,6 +166,7 @@ func (p *panel) caption() string {
 // content scrolls the panel when it is taller than the screen allows.
 func (p *panel) content(c *ui.Context) {
 	s := p.s
+	sk := skinOf(c)
 	scroll := ui.Scroll(c.Key("content")).Height(min(max(p.contentHeight, 1), p.maxContent))
 	scroll.Children(func() {
 		inner := ui.Column(c).Gap(10).Padding(0, 0, 4, 0)
@@ -169,11 +174,11 @@ func (p *panel) content(c *ui.Context) {
 			p.overview(c)
 			if s.notice != "" {
 				banner := ui.Row(c).Gap(7).Padding(8, 10).Radius(9).AlignItems(ui.Center).
-					Background(ui.RGBA(255, 255, 255, 0.055)).Border(0.7, cardStroke).
+					Background(sk.bannerFill).Border(0.7, sk.cardStroke).
 					Cursor(ui.CursorPointer)
 				banner.Children(func() {
-					ui.Box(c).Size(5, 5).Radius(2.5).Background(accent)
-					ui.Text(c, s.notice).FontSize(textCaption).TextColor(ink).Grow(1)
+					ui.Box(c).Size(5, 5).Radius(2.5).Background(sk.accent)
+					ui.Text(c, s.notice).FontSize(textCaption).TextColor(sk.ink).Grow(1)
 				})
 				if banner.Clicked() {
 					s.setNotice("")
@@ -191,6 +196,7 @@ func (p *panel) content(c *ui.Context) {
 // nothing: software dimming needs no explaining.
 func (p *panel) footer(c *ui.Context) ui.Element {
 	s := p.s
+	sk := skinOf(c)
 	text := ""
 	switch {
 	case s.link != nil && s.ddc != nil:
@@ -205,13 +211,13 @@ func (p *panel) footer(c *ui.Context) ui.Element {
 	if text == "" {
 		return ui.Box(c).Height(12)
 	}
-	dot := ui.RGB(52, 199, 89)
+	dot := sk.okDot
 	if s.link == nil && s.ddc == nil {
-		dot = ui.RGB(255, 204, 0)
+		dot = sk.warnDot
 	}
 	return ui.Row(c).Gap(6).Padding(10, 0, 4, 0).AlignItems(ui.Center).Children(func() {
 		ui.Box(c).Size(6, 6).Radius(3).Background(dot)
-		ui.Text(c, text).FontSize(textCaption).FontWeight(weightRegular).TextColor(muted).Grow(1)
+		ui.Text(c, text).FontSize(textCaption).FontWeight(weightRegular).TextColor(sk.muted).Grow(1)
 		if s.detectingAny() {
 			ui.Spinner(c).Size(12, 12)
 		}

@@ -6,14 +6,15 @@
 A one-panel monitor control for the Mac menu bar — <a href="#english">English</a></p>
 
 <p align="center">
-<img src="docs/screenshots/panel.png" width="270" alt="面板">
+<img src="docs/screenshots/panel.png" width="270" alt="面板 · 深色">
+<img src="docs/screenshots/panel_light.png" width="270" alt="面板 · 浅色">
 </p>
 
 ## 为什么做这个
 
 REDMI 显示器不提供 DDC/CI，常见的显示器工具因此切不了输入源、调不了音量。它们内置的澎湃 OS 在局域网里提供了一个遥控接口，MonitorBar 就用这个接口完成输入源切换和音量调节。
 
-支持 DDC/CI 的显示器则直接走硬件控制；只要显示器提供 Gamma 表，就能用软件调光和色温。整个应用是单个 .app：一页面板，没有标签页、webview 或单独的守护进程。
+支持 DDC/CI 的显示器则直接走硬件控制；只要显示器提供 Gamma 表，就能用软件调光和色温。整个应用是单个 .app：一页面板，没有标签页、webview 或单独的守护进程。面板跟随系统浅色 / 深色外观。
 
 ## 功能
 
@@ -94,7 +95,7 @@ go test ./...                                   # 单元测试与无窗口界面
 go tool mygo build -platform darwin/arm64 -o /tmp/mb-release
 ```
 
-重新生成面板截图：
+重新生成面板截图（深色 `panel*.png` 与浅色 `panel*_light.png`）：
 
 ```bash
 MONITORBAR_SNAPSHOTS=docs/screenshots go test -run TestSnapshots .
@@ -114,7 +115,7 @@ go run . --probe
 | --- | --- |
 | `main.go` / `app.go` | 入口、菜单栏图标、面板尺寸与位置 |
 | `store.go` | 状态与动作；网络和 DDC 在 goroutine 中，结果经 `post` 回到主线程 |
-| `panel.go` / `content.go` / `widgets.go` / `icons.go` | 界面、排版与图标 |
+| `panel.go` / `content.go` / `widgets.go` / `theme.go` / `icons.go` | 界面、排版、主题与图标 |
 | `settings.go` / `i18n.go` | 设置持久化、跟随系统的中英文 |
 | `internal/mitv` | 澎湃 OS 局域网遥控与发现 |
 | `internal/display` | macOS 平台层：显示器、模式、Gamma、DDC/CI |
@@ -140,7 +141,7 @@ go run . --probe
 
 ## English
 
-MonitorBar puts external-monitor control in the Mac menu bar: scene presets, brightness and warmth, volume and mute, input switching, refresh rate, and DDC/CI picture controls — one panel, no tabs.
+MonitorBar puts external-monitor control in the Mac menu bar: scene presets, brightness and warmth, volume and mute, input switching, refresh rate, and DDC/CI picture controls — one panel, no tabs. The panel follows the system's light or dark appearance.
 
 It targets HyperOS monitors such as the REDMI G Pro 27U, whose LAN API switches inputs and changes volume without DDC/CI. DDC/CI monitors use their hardware backlight and picture controls; gamma-table dimming and warmth work on displays that expose a gamma table. Input and volume prefer the LAN remote, then DDC/CI.
 
