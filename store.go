@@ -73,6 +73,7 @@ type store struct {
 	returnTo      float64
 
 	launchAtLogin       bool
+	applyTheme          func(mygo.ThemeSource) // applies a chosen appearance; nil in tests
 	notice              string
 	noticeGen           uint64
 	noticeTimer         *time.Timer
@@ -963,6 +964,19 @@ func (s *store) toggleLaunchAtLogin() {
 		s.setNotice(tr("登录项设置失败：", "Login item failed: ") + err.Error())
 	}
 	s.launchAtLogin = mygo.App.OpenAtLogin()
+}
+
+// setThemePreference saves the appearance the user picked: the system's
+// light/dark mode, or a pinned light or dark one.
+func (s *store) setThemePreference(pref string) {
+	if s.prefs == nil || s.prefs.Theme == pref {
+		return
+	}
+	s.prefs.Theme, s.dirty = pref, true
+	s.save()
+	if s.applyTheme != nil {
+		s.applyTheme(themeSource(pref))
+	}
 }
 
 func (s *store) save() {

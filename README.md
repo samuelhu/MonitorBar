@@ -14,7 +14,7 @@ A one-panel monitor control for the Mac menu bar — <a href="#english">English<
 
 REDMI 显示器不提供 DDC/CI，常见的显示器工具因此切不了输入源、调不了音量。它们内置的澎湃 OS 在局域网里提供了一个遥控接口，MonitorBar 就用这个接口完成输入源切换和音量调节。
 
-支持 DDC/CI 的显示器则直接走硬件控制；只要显示器提供 Gamma 表，就能用软件调光和色温。整个应用是单个 .app：一页面板，没有标签页、webview 或单独的守护进程。面板跟随系统浅色 / 深色外观。
+支持 DDC/CI 的显示器则直接走硬件控制；只要显示器提供 Gamma 表，就能用软件调光和色温。整个应用是单个 .app：一页面板，没有标签页、webview 或单独的守护进程。面板默认跟随系统浅色 / 深色外观，也可在「⋯」里固定。
 
 ## 功能
 
@@ -53,7 +53,7 @@ REDMI 显示器不提供 DDC/CI，常见的显示器工具因此切不了输入�
 
 点击菜单栏图标开关面板。面板右上角：
 
-- **⋯**：重新检测显示器、打开系统显示器设置、登录时启动、退出。
+- **⋯**：重新检测显示器、打开系统显示器设置、外观（跟随系统 / 浅色 / 深色）、登录时启动、退出。
 - **电源**：立即熄屏，下一次输入时唤醒。
 
 输入源与音量：点击芯片发送切换指令；DDC/CI 能读到当前源时才会高亮。局域网接口没有当前输入源回读，应用不会伪造状态——右键某个接口标记“本机连接”，标题会显示这台 Mac 所在的接口。
@@ -141,7 +141,7 @@ go run . --probe
 
 ## English
 
-MonitorBar puts external-monitor control in the Mac menu bar: scene presets, brightness and warmth, volume and mute, input switching, refresh rate, and DDC/CI picture controls — one panel, no tabs. The panel follows the system's light or dark appearance.
+MonitorBar puts external-monitor control in the Mac menu bar: scene presets, brightness and warmth, volume and mute, input switching, refresh rate, and DDC/CI picture controls — one panel, no tabs. The appearance follows the system's light or dark mode by default, and can be pinned from the ⋯ menu.
 
 It targets HyperOS monitors such as the REDMI G Pro 27U, whose LAN API switches inputs and changes volume without DDC/CI. DDC/CI monitors use their hardware backlight and picture controls; gamma-table dimming and warmth work on displays that expose a gamma table. Input and volume prefer the LAN remote, then DDC/CI.
 

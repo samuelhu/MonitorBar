@@ -23,6 +23,8 @@ func (a *app) ready(show bool) {
 	useSystemLanguage(mygo.App.Locale())
 	nameScenes()
 	a.s = newStore()
+	a.s.applyTheme = mygo.Theme.SetSource
+	mygo.Theme.SetSource(themeSource(a.s.prefs.Theme))
 	a.s.redraw = func() {
 		if a.flyout != nil {
 			a.flyout.Invalidate()

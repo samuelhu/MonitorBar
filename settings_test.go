@@ -39,3 +39,29 @@ func TestSettingsNormalizeUpgradesVersion(t *testing.T) {
 		t.Fatalf("version %d not upgraded to %d", s.Version, settingsVersion)
 	}
 }
+
+func TestSettingsThemePreference(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	s := &settings{Theme: "sepia", path: path}
+	s.normalize()
+	if s.Theme != themeSystem {
+		t.Fatalf("invalid theme normalized to %q, want %q", s.Theme, themeSystem)
+	}
+	s.Theme = themeDark
+	if err := s.save(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw struct {
+		Theme string `json:"theme"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw.Theme != themeDark {
+		t.Fatalf("saved theme %q, want %q", raw.Theme, themeDark)
+	}
+}

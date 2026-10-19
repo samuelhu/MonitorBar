@@ -133,6 +133,18 @@ func (p *panel) header(c *ui.Context) ui.Element {
 				_ = mygo.Shell.OpenExternal(display.SettingsURL)
 			}
 			m.Separator()
+			m.Submenu(tr("外观", "Appearance"), func(m *ui.Menu) {
+				for _, appearance := range []struct{ label, pref string }{
+					{tr("跟随系统", "Follow System"), themeSystem},
+					{tr("浅色", "Light"), themeLight},
+					{tr("深色", "Dark"), themeDark},
+				} {
+					if m.Item(appearance.label).Checked(s.prefs.Theme == appearance.pref).Chosen() {
+						s.setThemePreference(appearance.pref)
+					}
+				}
+			})
+			m.Separator()
 			if m.Item(tr("登录时启动", "Launch at login")).Checked(s.launchAtLogin).Chosen() {
 				s.toggleLaunchAtLogin()
 			}

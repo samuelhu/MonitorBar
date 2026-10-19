@@ -1,6 +1,41 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+)
+
+// The saved appearance choices: follow the system's light/dark mode, or
+// pin one.
+const (
+	themeSystem = "system"
+	themeLight  = "light"
+	themeDark   = "dark"
+)
+
+// themeSource maps a saved appearance choice to mygo's appearance source.
+func themeSource(pref string) mygo.ThemeSource {
+	switch pref {
+	case themeLight:
+		return mygo.ThemeLight
+	case themeDark:
+		return mygo.ThemeDark
+	default:
+		return mygo.ThemeSystem
+	}
+}
+
+// themePreference is the saved form of an appearance source.
+func themePreference(src mygo.ThemeSource) string {
+	switch src {
+	case mygo.ThemeLight:
+		return themeLight
+	case mygo.ThemeDark:
+		return themeDark
+	default:
+		return themeSystem
+	}
+}
 
 // skin is the palette of one appearance. The system's light or dark mode
 // picks it (see skinOf); the panel background, the cards and the text on

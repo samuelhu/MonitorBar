@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"monitorbar/internal/display"
@@ -18,11 +19,11 @@ import (
 
 // testPanel is the panel over a store of fixed data, connected to the
 // display over the LAN, without touching the system.
-func testPanel(t *testing.T) (*panel, *[2]float64) {
+func testPanel(t testing.TB) (*panel, *[2]float64) {
 	t.Helper()
 	var gamma [2]float64
 	s := &store{
-		prefs:               &settings{SoftBrightness: 100},
+		prefs:               &settings{SoftBrightness: 100, Theme: themeSystem},
 		redraw:              func() {},
 		setGamma:            func(b, w float64) error { gamma = [2]float64{b, w}; return nil },
 		restoreGamma:        func() {},
@@ -731,5 +732,87 @@ func TestMaxContentUpdatesAfterFooterGrowth(t *testing.T) {
 	}
 	if p.height != beforeHeight || p.height > p.maxHeight {
 		t.Fatalf("panel height %d did not settle back to %d (maxHeight %d)", p.height, beforeHeight, p.maxHeight)
+	}
+}
+
+// The ⋯ menu pins the appearance: the pick is saved and applied, and
+// picking the current one again changes nothing.
+func TestThemeMenu(t *testing.T) {
+	p, _ := testPanel(t)
+	var applied []mygo.ThemeSource
+	p.s.applyTheme = func(src mygo.ThemeSource) { applied = append(applied, src) }
+	tt := newTester(p)
+	openMenu := func() {
+		t.Helper()
+		if err := tt.Click("更多"); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+		if len(tt.Menu()) == 0 {
+			t.Fatalf("the menu did not open: %v", tt.Texts())
+		}
+	}
+	openMenu()
+	found := false
+	for _, label := range tt.Menu() {
+		if label == "外观" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the menu has no appearance submenu: %v", tt.Menu())
+	}
+
+	if err := tt.ChooseMenuItem("外观", "深色"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if p.s.prefs.Theme != themeDark {
+		t.Fatalf("saved theme %q, want %q", p.s.prefs.Theme, themeDark)
+	}
+	if len(applied) != 1 || applied[0] != mygo.ThemeDark {
+		t.Fatalf("applied %v, want [dark]", applied)
+	}
+
+	openMenu() // the same pick again: already saved, nothing to do
+	if err := tt.ChooseMenuItem("外观", "深色"); err != nil {
+		t.Fatal(err)
+	}
+	if len(applied) != 1 {
+		t.Fatalf("picking the current theme applied it again: %v", applied)
+	}
+
+	openMenu()
+	if err := tt.ChooseMenuItem("外观", "跟随系统"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if p.s.prefs.Theme != themeSystem {
+		t.Fatalf("saved theme %q, want %q", p.s.prefs.Theme, themeSystem)
+	}
+	if len(applied) != 2 || applied[1] != mygo.ThemeSystem {
+		t.Fatalf("applied %v, want [dark system]", applied)
+	}
+
+	openMenu()
+	if err := tt.ChooseMenuItem("外观", "浅色"); err != nil {
+		t.Fatal(err)
+	}
+	if p.s.prefs.Theme != themeLight || len(applied) != 3 || applied[2] != mygo.ThemeLight {
+		t.Fatalf("light: saved %q, applied %v", p.s.prefs.Theme, applied)
+	}
+}
+
+// BenchmarkPanelFrame measures one full frame of the open panel.
+func BenchmarkPanelFrame(b *testing.B) {
+	p, _ := testPanel(b)
+	tt := ui.NewTester(p.view, panelWidth, 1100)
+	for range 3 {
+		tt.Frame()
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		tt.Frame()
 	}
 }
